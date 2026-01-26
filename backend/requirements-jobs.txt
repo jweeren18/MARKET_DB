@@ -1,0 +1,12 @@
+# Requirements for Kubernetes batch jobs
+# Minimal dependencies needed for data processing tasks
+
+sqlalchemy>=2.0.25
+psycopg2-binary>=2.9.9
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.1
+httpx>=0.26.0
+pandas>=2.2.0
+numpy>=1.26.0
+ta>=0.11.0
