@@ -10,6 +10,16 @@ Personal investment intelligence platform focused on portfolio analytics, quanti
 - **Technical Signals**: Moving averages, RSI, MACD, volume analysis
 - **Dashboard Alerts**: Get notified of high-confidence opportunities
 
+## Git Workflow
+
+This project uses a two-branch workflow:
+
+- **`main`** - Production-ready code (protected, deployed to production)
+- **`dev`** - Active development (default branch for new work)
+
+👉 **Developers**: Always work on the `dev` branch or create feature branches from `dev`.
+👉 **See [CONTRIBUTING.md](CONTRIBUTING.md)** for detailed git workflow and contribution guidelines.
+
 ## Technology Stack
 
 ### Backend
