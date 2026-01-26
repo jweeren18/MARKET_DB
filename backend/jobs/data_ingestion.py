@@ -18,7 +18,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app.models import Ticker, PriceData
-from app.services.schwab_client import schwab_client
+from app.services.market_data_service import market_data_service
 from app.config import settings
 
 # Configure logging
@@ -48,11 +48,11 @@ class DataIngestionJob:
         logger.info(f"Fetching {days} days of price data for {symbol}")
 
         try:
-            data = await schwab_client.get_price_history(
+            data = await market_data_service.get_price_history(
                 symbol=symbol,
                 start_date=start_date,
                 end_date=end_date,
-                frequency="daily"
+                interval="1d"
             )
             return data
         except Exception as e:

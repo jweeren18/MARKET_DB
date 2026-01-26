@@ -10,3 +10,6 @@ httpx>=0.26.0
 pandas>=2.2.0
 numpy>=1.26.0
 ta>=0.11.0
+
+# Market data (development - no auth required)
+yfinance>=0.2.36
