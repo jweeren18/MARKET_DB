@@ -5,6 +5,7 @@ description = "Personal investment intelligence platform for portfolio analytics
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    # Backend API
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
     "sqlalchemy>=2.0.25",
@@ -14,13 +15,20 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "python-dotenv>=1.0.1",
     "httpx>=0.26.0",
+
+    # Data processing
     "pandas>=2.2.0",
     "numpy>=1.26.0",
     "ta>=0.11.0",
-    "apscheduler>=3.10.4",
+    "yfinance>=0.2.36",
+
+    # Frontend (Streamlit)
+    "streamlit>=1.30.0",
+    "plotly>=5.18.0",
+
+    # Authentication
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
-    "yfinance>=0.2.36",
 ]
 
 [project.optional-dependencies]

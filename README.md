@@ -2,7 +2,54 @@
 
 Personal investment intelligence platform focused on portfolio analytics, quantitative signals, and 10x opportunity identification.
 
-## Features
+## Quick Start
+
+```bash
+# 1. Start PostgreSQL with TimescaleDB
+docker run -d --name market-db-postgres \
+  -p 5433:5432 \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=market_intelligence \
+  timescale/timescaledb:latest-pg15
+
+# 2. Initialize database
+docker exec -i market-db-postgres psql -U postgres -d market_intelligence < scripts/init_db.sql
+
+# 3. Set up environment
+cp .env.example .env
+# Edit .env: DATABASE_URL=postgresql://postgres:password@127.0.0.1:5433/market_intelligence
+
+# 4. Install dependencies
+uv sync
+
+# 5. Seed sample data
+uv run python scripts/seed_data.py
+
+# 6. Fetch market data
+uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT,NVDA --days 30
+
+# 7. Start backend API
+cd backend
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+Visit http://localhost:8000/docs for API documentation.
+
+For detailed setup instructions, see [SETUP.md](SETUP.md).
+
+## Current Status
+
+**Phase 1B Complete** - Data ingestion and backend infrastructure operational:
+- ✅ FastAPI backend with portfolio CRUD APIs
+- ✅ PostgreSQL + TimescaleDB database with hypertables
+- ✅ Market data ingestion using yfinance (Schwab-ready via abstraction layer)
+- ✅ 21 sample tickers seeded for testing
+- ✅ Airflow + Kubernetes integration configured
+- ✅ Development workflow without Schwab API credentials
+
+**Next Steps** (Phase 1C): Build analytics service for portfolio metrics and risk calculations.
+
+## Planned Features
 
 - **Portfolio Tracking**: Monitor holdings, P&L, and returns (TWR/MWR)
 - **Risk Analytics**: Volatility, beta, Sharpe ratio, max drawdown
@@ -36,10 +83,9 @@ This project uses a two-branch workflow:
 - KubernetesPodOperator
 
 ### Frontend
-- Next.js 14+
-- TypeScript
-- Tailwind CSS
-- Recharts
+- **Streamlit** (Python-based dashboard framework)
+- Plotly for interactive charts
+- Pandas for data manipulation
 
 ## Architecture
 
@@ -68,19 +114,25 @@ See [AIRFLOW_SETUP.md](AIRFLOW_SETUP.md) for detailed orchestration setup.
 
 #### Option 1: Docker (Recommended)
 
+**Note:** If you have PostgreSQL installed locally on Windows, it may conflict with Docker on port 5432. See [SETUP.md](SETUP.md) for port conflict resolution.
+
 ```bash
 # Pull and run TimescaleDB container
-docker run -d --name timescaledb \
-  -p 5432:5432 \
+# Use port 5433 if you have local PostgreSQL on 5432
+docker run -d --name market-db-postgres \
+  -p 5433:5432 \
   -e POSTGRES_PASSWORD=password \
   -e POSTGRES_DB=market_intelligence \
   timescale/timescaledb:latest-pg15
 
-# Wait for container to start (30 seconds)
-sleep 30
+# Wait for container to start
+sleep 5
 
 # Initialize database
-docker exec -i timescaledb psql -U postgres -d market_intelligence < scripts/init_db.sql
+docker exec -i market-db-postgres psql -U postgres -d market_intelligence < scripts/init_db.sql
+
+# Update your .env file:
+# DATABASE_URL=postgresql://postgres:password@127.0.0.1:5433/market_intelligence
 ```
 
 #### Option 2: Local PostgreSQL Installation
@@ -127,27 +179,40 @@ Backend will be available at http://localhost:8000
 
 API docs available at http://localhost:8000/docs
 
-### Frontend Setup
+### Frontend Setup (Coming Soon)
+
+**Status:** Streamlit frontend will be implemented in Phase 1E after analytics services are complete.
 
 ```bash
-# Navigate to frontend directory
-cd frontend
+# Install Streamlit (included in pyproject.toml)
+uv sync
 
-# Install dependencies
-npm install
-
-# Copy environment variables
-cp .env.example .env.local
-
-# Edit .env.local with backend API URL
-
-# Start development server
-npm run dev
+# Start Streamlit dashboard (once implemented)
+uv run streamlit run frontend/app.py
 ```
 
-Frontend will be available at http://localhost:3000
+Dashboard will be available at http://localhost:8501
 
-## Schwab API Setup
+## Market Data Setup
+
+### Option 1: Development with yfinance (No API Required)
+
+The platform automatically uses **yfinance** when Schwab API credentials are not configured. This allows full development capability without waiting for API access.
+
+```bash
+# Seed sample tickers
+uv run python scripts/seed_data.py
+
+# Fetch market data (30 days)
+uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT,NVDA --days 30
+
+# Or fetch for all seeded tickers
+uv run python backend/jobs/data_ingestion.py --all --days 30
+```
+
+See [DEVELOPMENT_WITHOUT_SCHWAB.md](DEVELOPMENT_WITHOUT_SCHWAB.md) for details.
+
+### Option 2: Schwab API (Production)
 
 1. Create a Schwab Developer account at https://developer.schwab.com/
 2. Create a new application
@@ -165,16 +230,25 @@ market-db/
 │   │   ├── models/       # SQLAlchemy models
 │   │   ├── schemas/      # Pydantic schemas
 │   │   ├── services/     # Business logic
-│   │   ├── tasks/        # Background jobs
+│   │   ├── tasks/        # Background jobs (unused - see jobs/)
 │   │   └── utils/        # Helper functions
+│   ├── jobs/             # Airflow job scripts
+│   │   ├── data_ingestion.py
+│   │   ├── calculate_indicators.py
+│   │   ├── score_opportunities.py
+│   │   └── generate_alerts.py
 │   └── tests/
 ├── frontend/
-│   ├── app/              # Next.js pages
-│   ├── components/       # React components
-│   ├── lib/              # Utilities
-│   └── hooks/            # Custom hooks
+│   ├── app.py            # Streamlit main app (to be implemented)
+│   ├── pages/            # Streamlit pages
+│   └── components/       # Reusable Streamlit components
+├── airflow/
+│   └── dags/             # Airflow DAG definitions
+├── kubernetes/
+│   └── jobs/             # Kubernetes job manifests
 ├── scripts/
-│   └── init_db.sql       # Database initialization
+│   ├── init_db.sql       # Database initialization
+│   └── seed_data.py      # Sample data seeding
 ├── .env.example
 └── pyproject.toml
 ```
@@ -188,9 +262,9 @@ market-db/
 cd backend
 uv run pytest
 
-# Frontend tests
+# Frontend tests (to be implemented with Streamlit)
 cd frontend
-npm test
+uv run pytest test_*.py
 ```
 
 ### Database Migrations
@@ -203,15 +277,27 @@ alembic revision --autogenerate -m "description"
 alembic upgrade head
 ```
 
-### Daily Batch Jobs
+### Daily Batch Jobs (Airflow + Kubernetes)
 
-The system runs daily batch jobs to:
-- Fetch market data (4:00 PM)
-- Calculate technical indicators (4:30 PM)
-- Score opportunities (5:00 PM)
-- Generate alerts (5:15 PM)
+The system runs daily batch jobs orchestrated by Airflow:
+- **Data Ingestion** (4:00 PM): Fetch market data from Schwab/yfinance
+- **Calculate Indicators** (4:30 PM): Calculate technical indicators
+- **Score Opportunities** (5:00 PM): Run 10x scoring algorithm
+- **Generate Alerts** (5:15 PM): Generate dashboard alerts
 
-These run automatically via APScheduler when the backend is running.
+Jobs run in isolated Kubernetes pods. See [AIRFLOW_SETUP.md](AIRFLOW_SETUP.md) for configuration.
+
+For development, jobs can be run manually:
+```bash
+# Run data ingestion
+uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT --days 30
+
+# Run indicator calculation (coming in Phase 1D)
+uv run python backend/jobs/calculate_indicators.py
+
+# Run opportunity scoring (coming in Phase 1E)
+uv run python backend/jobs/score_opportunities.py
+```
 
 ## API Endpoints
 
@@ -236,40 +322,81 @@ These run automatically via APScheduler when the backend is running.
 
 ## Configuration
 
-Key environment variables:
+Key environment variables (see [.env.example](.env.example)):
 
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/market_intelligence
-SCHWAB_API_KEY=your_key
-SCHWAB_API_SECRET=your_secret
-SECRET_KEY=your-secret-key
+# Use port 5433 if you have local PostgreSQL on 5432
+DATABASE_URL=postgresql://postgres:password@127.0.0.1:5433/market_intelligence
+TIMESCALEDB_ENABLED=true
+
+# Optional - falls back to yfinance for development
+SCHWAB_API_KEY=your_api_key_here
+SCHWAB_API_SECRET=your_api_secret_here
+
+# Generate with: openssl rand -hex 32
+SECRET_KEY=your-secret-key-change-this-in-production
+
+# Backend/Frontend ports
+BACKEND_PORT=8000
+FRONTEND_PORT=8501
+
+# Job schedules (cron format)
+DATA_INGESTION_SCHEDULE=0 16 * * *
+SCORING_SCHEDULE=0 17 * * *
 ```
 
 ## Roadmap
 
 ### Phase 1A: Foundation ✅
-- Backend structure
-- Database setup
-- Core models
-- Portfolio CRUD
+- Backend structure with FastAPI
+- Database setup (PostgreSQL + TimescaleDB)
+- SQLAlchemy core models
+- Portfolio CRUD APIs
+- Airflow + Kubernetes integration
 
-### Phase 1B: Market Data & Analytics (In Progress)
-- Schwab API integration
-- Portfolio analytics
-- Price data ingestion
+### Phase 1B: Market Data Ingestion ✅
+- Market data service with provider abstraction (Schwab/yfinance)
+- Daily price data ingestion job
+- Sample data seeding (21 tickers)
+- Database initialization scripts
+- Development workflow without Schwab API
 
-### Phase 1C: Signal Engine
-- Technical indicators
-- Fundamental metrics
+### Phase 1C: Portfolio Analytics (Next)
+- Portfolio P&L calculations
+- Time-weighted returns (TWR)
+- Money-weighted returns (MWR)
+- Asset allocation breakdowns
+- Risk metrics (volatility, beta, Sharpe ratio, max drawdown)
 
-### Phase 1D: Opportunity Scorer
-- Rule-based scoring
-- Explainability
-- Scenario modeling
+### Phase 1D: Signal Engine
+- Technical indicator calculations (MA, RSI, MACD, volume)
+- Fundamental metric calculations
+- Signal calculation batch job
+- Indicator storage and APIs
 
-### Phase 1E: Alerts & Polish
-- Alert system
-- UI polish
+### Phase 1E: Opportunity Scorer
+- Rule-based 10x scoring algorithm (5 components)
+- Confidence level calculation
+- Bull/base/bear scenario modeling
+- Explainability generation
+- Opportunity scoring batch job
+
+### Phase 1F: Streamlit Dashboard
+- Portfolio overview page
+- Holdings table with live prices
+- Allocation charts (sector, market cap)
+- Performance charts (TWR/MWR)
+- Risk metrics dashboard
+- Opportunity radar with score breakdown
+- Asset deep dive with indicators
+- Alert notifications
+
+### Phase 1G: Alerts & Production Polish
+- Alert generation logic
+- Alert notification system
+- Error handling and logging
+- Performance optimization
+- Production deployment preparation
 
 ### Phase 2: Sentiment Intelligence (Future)
 - Data collection
