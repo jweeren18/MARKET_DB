@@ -9,11 +9,16 @@ Usage:
     python jobs/calculate_indicators.py [--tickers AAPL,MSFT,NVDA]
 """
 
+import sys
+import os
 import argparse
 import logging
 from datetime import datetime, timedelta
 from typing import List
 import pandas as pd
+
+# Add backend to path so we can import app modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_

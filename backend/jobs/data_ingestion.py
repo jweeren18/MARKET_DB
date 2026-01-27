@@ -9,11 +9,16 @@ Usage:
     python jobs/data_ingestion.py [--tickers AAPL,MSFT,NVDA] [--days 1]
 """
 
+import sys
+import os
 import asyncio
 import argparse
 import logging
 from datetime import datetime, timedelta
 from typing import List
+
+# Add backend to path so we can import app modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine

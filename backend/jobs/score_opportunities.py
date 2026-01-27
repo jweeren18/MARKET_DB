@@ -9,10 +9,15 @@ Usage:
     python jobs/score_opportunities.py [--tickers AAPL,MSFT,NVDA]
 """
 
+import sys
+import os
 import argparse
 import logging
 from datetime import datetime
 from typing import List
+
+# Add backend to path so we can import app modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy.orm import Session
 from app.database import SessionLocal

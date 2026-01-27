@@ -9,10 +9,15 @@ Usage:
     python jobs/generate_alerts.py
 """
 
+import sys
+import os
 import logging
 from datetime import datetime, timedelta
 from typing import List, Optional
 import uuid
+
+# Add backend to path so we can import app modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
