@@ -53,7 +53,7 @@ class TechnicalIndicator(Base):
     timestamp = Column(DateTime(timezone=True), nullable=False)
     indicator_name = Column(String(50), nullable=False)
     value = Column(DECIMAL(18, 6))
-    metadata = Column(JSONB)  # Store additional context as JSON
+    meta = Column(JSONB)  # Store additional context as JSON
 
     # Composite primary key
     __table_args__ = (

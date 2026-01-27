@@ -69,7 +69,7 @@ class AlertGenerationJob:
         alert_type: str,
         severity: str,
         message: str,
-        metadata: dict = None
+        meta: dict = None
     ):
         """Create a new alert."""
         alert = Alert(
@@ -77,7 +77,7 @@ class AlertGenerationJob:
             alert_type=alert_type,
             severity=severity,
             message=message,
-            metadata=metadata,
+            meta=meta,
             is_read=False
         )
 
@@ -101,7 +101,7 @@ class AlertGenerationJob:
                     alert_type="NEW_HIGH_SCORE",
                     severity="HIGH",
                     message=f"{score.ticker} has a new high opportunity score of {score.overall_score:.1f} (Confidence: {score.confidence_level:.1f}%)",
-                    metadata={
+                    meta={
                         "score": float(score.overall_score),
                         "confidence": float(score.confidence_level),
                         "previous_score": float(previous.overall_score) if previous else None
@@ -124,7 +124,7 @@ class AlertGenerationJob:
                     alert_type="SIGNIFICANT_CHANGE",
                     severity=severity,
                     message=f"{score.ticker} score {direction} by {score_change:.1f} points (from {previous.overall_score:.1f} to {score.overall_score:.1f})",
-                    metadata={
+                    meta={
                         "score": float(score.overall_score),
                         "previous_score": float(previous.overall_score),
                         "change": float(score_change),

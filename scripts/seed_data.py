@@ -88,17 +88,17 @@ async def fetch_and_update_ticker_info(db, ticker_symbol: str):
                 ticker.market_cap_category = 'MICRO'
 
             db.commit()
-            print(f"✓ Updated {ticker_symbol} with real data")
+            print(f"[OK] Updated {ticker_symbol} with real data")
         else:
-            print(f"✗ Ticker {ticker_symbol} not found in database")
+            print(f"[SKIP] Ticker {ticker_symbol} not found in database")
 
     except Exception as e:
-        print(f"✗ Failed to fetch data for {ticker_symbol}: {e}")
+        print(f"[ERROR] Failed to fetch data for {ticker_symbol}: {e}")
 
 
 def seed_tickers(db, fetch_real_data: bool = False):
     """Seed the database with sample tickers."""
-    print(f"\n📊 Seeding {len(SAMPLE_TICKERS)} tickers...")
+    print(f"\n[SEED] Seeding {len(SAMPLE_TICKERS)} tickers...")
 
     added = 0
     updated = 0
@@ -119,11 +119,11 @@ def seed_tickers(db, fetch_real_data: bool = False):
 
     db.commit()
 
-    print(f"✅ Added {added} new tickers, updated {updated} existing tickers")
+    print(f"[SUCCESS] Added {added} new tickers, updated {updated} existing tickers")
 
     # Optionally fetch real data from yfinance
     if fetch_real_data:
-        print("\n🌐 Fetching real data from yfinance...")
+        print("\n[FETCH] Fetching real data from yfinance...")
         for ticker_data in SAMPLE_TICKERS:
             asyncio.run(fetch_and_update_ticker_info(db, ticker_data['ticker']))
 
@@ -139,7 +139,7 @@ def main():
 
     args = parser.parse_args()
 
-    print("🌱 Market Intelligence Database Seeding")
+    print("Market Intelligence Database Seeding")
     print("=" * 50)
 
     # Create database session
@@ -149,7 +149,7 @@ def main():
         # Seed tickers
         seed_tickers(db, fetch_real_data=args.fetch_prices)
 
-        print("\n✨ Database seeding complete!")
+        print("\n[COMPLETE] Database seeding complete!")
         print(f"\nYou can now:")
         print(f"  1. View tickers in the database")
         print(f"  2. Create portfolios and add holdings")
@@ -157,7 +157,7 @@ def main():
         print(f"  4. Test the scoring algorithm")
 
     except Exception as e:
-        print(f"\n❌ Seeding failed: {e}")
+        print(f"\n[FAILED] Seeding failed: {e}")
         raise
     finally:
         db.close()

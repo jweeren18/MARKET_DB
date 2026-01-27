@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     indicator_name VARCHAR(50) NOT NULL,
     value DECIMAL(18, 6),
-    metadata JSONB,
+    meta JSONB,
     PRIMARY KEY (ticker, timestamp, indicator_name)
 );
 
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     alert_type VARCHAR(50) NOT NULL,
     severity VARCHAR(20) NOT NULL CHECK (severity IN ('INFO', 'MEDIUM', 'HIGH')),
     message TEXT NOT NULL,
-    metadata JSONB,
+    meta JSONB,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
