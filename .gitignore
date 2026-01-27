@@ -38,6 +38,9 @@ venv.bak/
 .env.local
 .env.*.local
 
+# Schwab OAuth tokens
+.schwab_tokens.json
+
 # IDE
 .vscode/
 .idea/

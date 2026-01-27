@@ -2,18 +2,20 @@
 Schwab API Client for fetching market data.
 
 This client handles:
-- Authentication with Schwab API
+- OAuth 2.0 authentication with Schwab API
+- Token storage and refresh
 - Fetching historical price data
 - Fetching real-time quotes
-- Fetching fundamental data
-- Rate limiting and caching
+- Rate limiting and error handling
 """
 
 import httpx
 import logging
+import json
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
-from functools import lru_cache
+from pathlib import Path
+from authlib.integrations.httpx_client import OAuth2Client
 
 from app.config import settings
 
@@ -30,41 +32,141 @@ class SchwabClient:
     Client for interacting with Schwab Developer API.
 
     Schwab API Documentation: https://developer.schwab.com/products/trader-api--individual
+    Uses OAuth 2.0 Authorization Code flow for authentication.
     """
 
     BASE_URL = "https://api.schwabapi.com/marketdata/v1"
+    AUTH_URL = "https://api.schwabapi.com/v1/oauth/authorize"
+    TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
 
     def __init__(self):
         """Initialize Schwab API client."""
         self.api_key = settings.schwab_api_key
         self.api_secret = settings.schwab_api_secret
-        self.access_token: Optional[str] = None
-        self.token_expires_at: Optional[datetime] = None
+        self.callback_url = settings.schwab_callback_url
+
+        # Token storage file
+        self.token_file = Path(__file__).parent.parent.parent.parent / ".schwab_tokens.json"
+
+        # OAuth client
+        self.oauth_client: Optional[OAuth2Client] = None
 
         if not self.api_key or not self.api_secret:
             logger.warning("Schwab API credentials not configured")
+        else:
+            self._load_tokens()
 
-    async def _get_access_token(self) -> str:
+    def _load_tokens(self) -> None:
+        """Load stored OAuth tokens from file."""
+        if self.token_file.exists():
+            try:
+                with open(self.token_file, "r") as f:
+                    token_data = json.load(f)
+
+                # Initialize OAuth client with stored token
+                self.oauth_client = OAuth2Client(
+                    client_id=self.api_key,
+                    client_secret=self.api_secret,
+                    token_endpoint=self.TOKEN_URL,
+                    token=token_data,
+                )
+
+                logger.info("Loaded stored Schwab OAuth tokens")
+            except Exception as e:
+                logger.error(f"Failed to load tokens: {e}")
+                self.oauth_client = None
+        else:
+            logger.info("No stored tokens found - OAuth flow required")
+
+    def _save_tokens(self, token: Dict[str, Any]) -> None:
+        """Save OAuth tokens to file."""
+        try:
+            with open(self.token_file, "w") as f:
+                json.dump(token, f, indent=2)
+            logger.info("Saved Schwab OAuth tokens")
+        except Exception as e:
+            logger.error(f"Failed to save tokens: {e}")
+
+    def get_authorization_url(self) -> str:
         """
-        Get or refresh OAuth access token.
+        Get the OAuth authorization URL for user login.
 
-        Note: Schwab uses OAuth 2.0 for authentication.
-        This is a placeholder - actual implementation will depend on
-        your Schwab Developer account setup.
+        Returns:
+            Authorization URL to redirect user to
         """
-        # Check if token is still valid
-        if self.access_token and self.token_expires_at:
-            if datetime.now() < self.token_expires_at:
-                return self.access_token
+        params = {
+            "response_type": "code",
+            "client_id": self.api_key,
+            "redirect_uri": self.callback_url,
+            "scope": "readonly",  # Adjust scope as needed
+        }
 
-        # TODO: Implement OAuth 2.0 flow with Schwab
-        # Steps:
-        # 1. User authorization (redirect to Schwab login)
-        # 2. Exchange authorization code for access token
-        # 3. Refresh token when expired
+        query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+        auth_url = f"{self.AUTH_URL}?{query_string}"
 
-        logger.warning("Schwab OAuth implementation required")
-        raise SchwabAPIError("Schwab API authentication not configured")
+        logger.info(f"Authorization URL: {auth_url}")
+        return auth_url
+
+    async def exchange_code_for_token(self, authorization_code: str) -> Dict[str, Any]:
+        """
+        Exchange authorization code for access token.
+
+        Args:
+            authorization_code: Code received from OAuth callback
+
+        Returns:
+            Token response containing access_token, refresh_token, etc.
+        """
+        try:
+            # Create OAuth client
+            self.oauth_client = OAuth2Client(
+                client_id=self.api_key,
+                client_secret=self.api_secret,
+                token_endpoint=self.TOKEN_URL,
+            )
+
+            # Exchange code for token
+            token = await self.oauth_client.fetch_token(
+                url=self.TOKEN_URL,
+                grant_type="authorization_code",
+                code=authorization_code,
+                redirect_uri=self.callback_url,
+            )
+
+            # Save tokens
+            self._save_tokens(token)
+
+            logger.info("Successfully obtained access token")
+            return token
+
+        except Exception as e:
+            logger.error(f"Failed to exchange code for token: {e}")
+            raise SchwabAPIError(f"Token exchange failed: {str(e)}")
+
+    async def _ensure_valid_token(self) -> None:
+        """Ensure we have a valid access token, refreshing if necessary."""
+        if not self.oauth_client:
+            raise SchwabAPIError(
+                "Not authenticated. Please complete OAuth flow first. "
+                "Call get_authorization_url() to start."
+            )
+
+        # Check if token needs refresh
+        token = self.oauth_client.token
+        if token and "expires_at" in token:
+            expires_at = datetime.fromtimestamp(token["expires_at"])
+            # Refresh if token expires in less than 5 minutes
+            if datetime.now() >= expires_at - timedelta(minutes=5):
+                logger.info("Access token expired or expiring soon, refreshing...")
+                try:
+                    new_token = await self.oauth_client.refresh_token(
+                        url=self.TOKEN_URL,
+                    )
+                    self._save_tokens(new_token)
+                    logger.info("Token refreshed successfully")
+                except Exception as e:
+                    logger.error(f"Token refresh failed: {e}")
+                    raise SchwabAPIError(f"Token refresh failed: {str(e)}")
 
     async def _make_request(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None
@@ -73,170 +175,202 @@ class SchwabClient:
         Make an authenticated request to Schwab API.
 
         Args:
-            endpoint: API endpoint (e.g., "/quotes/{symbol}")
+            endpoint: API endpoint (e.g., "/pricehistory")
             params: Query parameters
 
         Returns:
             API response as dictionary
         """
-        if not self.api_key:
-            raise SchwabAPIError("Schwab API key not configured")
+        await self._ensure_valid_token()
 
         try:
-            # Get access token
-            # token = await self._get_access_token()
+            url = f"{self.BASE_URL}{endpoint}"
 
-            # Make request
-            async with httpx.AsyncClient() as client:
-                headers = {
-                    # "Authorization": f"Bearer {token}",
-                    "Accept": "application/json",
-                }
+            # Use OAuth client to make authenticated request
+            response = await self.oauth_client.get(url, params=params, timeout=30.0)
+            response.raise_for_status()
 
-                url = f"{self.BASE_URL}{endpoint}"
-                response = await client.get(url, headers=headers, params=params, timeout=30.0)
-                response.raise_for_status()
-
-                return response.json()
+            return response.json()
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"Schwab API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise SchwabAPIError(f"HTTP {e.response.status_code}: {e.response.text}")
+            error_detail = e.response.text
+            logger.error(f"Schwab API HTTP error: {e.response.status_code} - {error_detail}")
+
+            # Parse error response if JSON
+            try:
+                error_json = e.response.json()
+                if "errors" in error_json:
+                    error_messages = [err.get("detail", err.get("title", "Unknown error"))
+                                    for err in error_json["errors"]]
+                    error_detail = "; ".join(error_messages)
+            except:
+                pass
+
+            raise SchwabAPIError(f"HTTP {e.response.status_code}: {error_detail}")
+
         except Exception as e:
             logger.error(f"Schwab API request failed: {e}")
             raise SchwabAPIError(f"Request failed: {str(e)}")
 
-    async def get_quote(self, symbol: str) -> Dict[str, Any]:
+    async def get_quote(self, symbol: str, fields: Optional[str] = None) -> Dict[str, Any]:
         """
         Get real-time quote for a symbol.
 
         Args:
             symbol: Stock symbol (e.g., "AAPL")
+            fields: Comma-separated list of fields to include
 
         Returns:
             Quote data including price, volume, etc.
         """
         logger.info(f"Fetching quote for {symbol}")
 
-        # TODO: Implement actual Schwab API call
-        # endpoint = f"/quotes/{symbol}"
-        # return await self._make_request(endpoint)
+        params = {}
+        if fields:
+            params["fields"] = fields
 
-        # Placeholder response
-        logger.warning("Using mock quote data - Schwab API not implemented")
-        return {
-            "symbol": symbol,
-            "lastPrice": 150.00,
-            "change": 2.50,
-            "changePercent": 1.69,
-            "volume": 50000000,
-            "timestamp": datetime.now().isoformat(),
-        }
+        endpoint = f"/quotes/{symbol}"
+        return await self._make_request(endpoint, params)
 
     async def get_price_history(
         self,
         symbol: str,
+        period_type: Optional[str] = None,
+        period: Optional[int] = None,
+        frequency_type: Optional[str] = None,
+        frequency: Optional[int] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        frequency: str = "daily",
-    ) -> List[Dict[str, Any]]:
+        need_extended_hours: bool = False,
+        need_previous_close: bool = True,
+    ) -> Dict[str, Any]:
         """
         Get historical price data for a symbol.
 
         Args:
-            symbol: Stock symbol
-            start_date: Start date for historical data
-            end_date: End date for historical data
-            frequency: Data frequency ('daily', 'weekly', 'monthly')
+            symbol: Stock symbol (e.g., "AAPL")
+            period_type: Chart period type (day, month, year, ytd)
+            period: Number of periods
+            frequency_type: Time frequency type (minute, daily, weekly, monthly)
+            frequency: Time frequency duration
+            start_date: Start date (datetime object)
+            end_date: End date (datetime object)
+            need_extended_hours: Include extended hours data
+            need_previous_close: Include previous close price/date
 
         Returns:
-            List of OHLCV data points
+            Price history with candles array containing OHLCV data
+
+        Example response:
+            {
+              "symbol": "AAPL",
+              "empty": false,
+              "previousClose": 174.56,
+              "previousCloseDate": 1639029600000,
+              "candles": [
+                {
+                  "open": 175.01,
+                  "high": 175.15,
+                  "low": 175.01,
+                  "close": 175.04,
+                  "volume": 10719,
+                  "datetime": 1639137600000
+                }
+              ]
+            }
         """
         logger.info(f"Fetching price history for {symbol}")
 
+        params = {"symbol": symbol}
+
+        # Add optional parameters
+        if period_type:
+            params["periodType"] = period_type
+        if period is not None:
+            params["period"] = period
+        if frequency_type:
+            params["frequencyType"] = frequency_type
+        if frequency is not None:
+            params["frequency"] = frequency
+        if start_date:
+            # Convert to EPOCH milliseconds
+            params["startDate"] = int(start_date.timestamp() * 1000)
+        if end_date:
+            # Convert to EPOCH milliseconds
+            params["endDate"] = int(end_date.timestamp() * 1000)
+        if need_extended_hours:
+            params["needExtendedHoursData"] = "true"
+        if need_previous_close:
+            params["needPreviousClose"] = "true"
+
+        endpoint = "/pricehistory"
+        return await self._make_request(endpoint, params)
+
+    async def get_price_history_daily(
+        self,
+        symbol: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Convenience method to get daily price history.
+
+        Args:
+            symbol: Stock symbol
+            start_date: Start date (defaults to 1 year ago)
+            end_date: End date (defaults to today)
+
+        Returns:
+            List of daily candles with OHLCV data
+        """
         if not start_date:
             start_date = datetime.now() - timedelta(days=365)
         if not end_date:
             end_date = datetime.now()
 
-        # TODO: Implement actual Schwab API call
-        # params = {
-        #     "periodType": "year",
-        #     "period": 1,
-        #     "frequencyType": frequency,
-        #     "frequency": 1,
-        #     "startDate": int(start_date.timestamp() * 1000),
-        #     "endDate": int(end_date.timestamp() * 1000),
-        # }
-        # endpoint = f"/pricehistory/{symbol}"
-        # response = await self._make_request(endpoint, params)
-        # return response.get("candles", [])
+        response = await self.get_price_history(
+            symbol=symbol,
+            period_type="year",
+            period=1,
+            frequency_type="daily",
+            frequency=1,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
-        # Placeholder response
-        logger.warning("Using mock price history - Schwab API not implemented")
-        return []
+        return response.get("candles", [])
 
-    async def get_fundamentals(self, symbol: str) -> Dict[str, Any]:
+    async def get_instruments(
+        self, symbol: str, projection: str = "symbol-search"
+    ) -> Dict[str, Any]:
         """
-        Get fundamental data for a symbol.
+        Search for instruments by symbol or description.
 
         Args:
-            symbol: Stock symbol
+            symbol: Symbol or search query
+            projection: Type of search (symbol-search, symbol-regex, desc-search, etc.)
 
         Returns:
-            Fundamental data (P/E, market cap, etc.)
+            Instrument data
         """
-        logger.info(f"Fetching fundamentals for {symbol}")
+        logger.info(f"Searching instruments for: {symbol}")
 
-        # TODO: Implement actual Schwab API call
-        # Note: Check if Schwab provides fundamental data in their API
-        # May need to use a different source for fundamentals
+        params = {"symbol": symbol, "projection": projection}
+        endpoint = "/instruments"
+        return await self._make_request(endpoint, params)
 
-        # Placeholder response
-        logger.warning("Using mock fundamental data - Schwab API not implemented")
-        return {
-            "symbol": symbol,
-            "marketCap": 2500000000000,
-            "peRatio": 28.5,
-            "sector": "Technology",
-            "industry": "Consumer Electronics",
-        }
+    def is_authenticated(self) -> bool:
+        """Check if client is authenticated with valid token."""
+        if not self.oauth_client or not self.oauth_client.token:
+            return False
 
-    async def search_symbols(self, query: str) -> List[Dict[str, Any]]:
-        """
-        Search for symbols by name or ticker.
+        token = self.oauth_client.token
+        if "expires_at" in token:
+            expires_at = datetime.fromtimestamp(token["expires_at"])
+            return datetime.now() < expires_at
 
-        Args:
-            query: Search query
-
-        Returns:
-            List of matching symbols
-        """
-        logger.info(f"Searching symbols for: {query}")
-
-        # TODO: Implement actual Schwab API call
-        # endpoint = f"/instruments"
-        # params = {"symbol": query, "projection": "symbol-search"}
-        # return await self._make_request(endpoint, params)
-
-        # Placeholder response
-        logger.warning("Using mock search results - Schwab API not implemented")
-        return []
+        return True
 
 
 # Global client instance
 schwab_client = SchwabClient()
-
-
-# Cached helper functions
-
-@lru_cache(maxsize=1000)
-def get_cached_quote(symbol: str) -> Dict[str, Any]:
-    """
-    Get cached quote (valid for 1 minute).
-    Use for frequently accessed symbols to reduce API calls.
-    """
-    # Note: This is synchronous caching
-    # For production, use Redis or similar for distributed caching
-    import asyncio
-    return asyncio.run(schwab_client.get_quote(symbol))

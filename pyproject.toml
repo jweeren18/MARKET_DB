@@ -26,9 +26,10 @@ dependencies = [
     "streamlit>=1.30.0",
     "plotly>=5.18.0",
 
-    # Authentication
+    # Authentication & OAuth
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
+    "authlib>=1.3.0",
 ]
 
 [project.optional-dependencies]
