@@ -8,15 +8,59 @@ Complete guide for setting up the Charles Schwab Developer API for production ma
 - ✅ Schwab Developer App created
 - ✅ App Key (Client ID) and App Secret received
 
+## Step 0: Setup HTTPS for localhost (Required)
+
+**Important:** Schwab requires HTTPS for callback URLs, even for localhost development.
+
+### Generate Self-Signed SSL Certificate
+
+**Windows (PowerShell):**
+```powershell
+powershell scripts/generate_cert.ps1
+```
+
+**Linux/Mac/Git Bash:**
+```bash
+bash scripts/generate_cert.sh
+```
+
+This creates:
+- `certs/key.pem` - Private key
+- `certs/cert.pem` - SSL certificate
+
+These files are automatically gitignored and will last for 1 year.
+
+### Start Backend with HTTPS
+
+**Windows (PowerShell):**
+```powershell
+powershell scripts/start_backend_https.ps1
+```
+
+**Linux/Mac/Git Bash:**
+```bash
+bash scripts/start_backend_https.sh
+```
+
+**Or manually:**
+```bash
+cd backend
+uv run uvicorn app.main:app --reload --port 8000 --ssl-keyfile=../certs/key.pem --ssl-certfile=../certs/cert.pem
+```
+
+Backend will be available at: **https://localhost:8000**
+
+**Note:** Your browser will show a security warning (self-signed certificate). Click "Advanced" → "Proceed to localhost" to continue.
+
 ## Step 1: Configure Your Schwab App
 
 1. Log in to [Schwab Developer Portal](https://developer.schwab.com/)
 2. Navigate to your application
 3. Configure the **Callback URL** (Redirect URI):
    ```
-   http://localhost:8000/auth/callback
+   https://localhost:8000/auth/callback
    ```
-   **Important:** This must match exactly with what's in your `.env` file
+   **Important:** This must match exactly with what's in your `.env` file (use HTTPS)
 
 4. Note your credentials:
    - **App Key** (also called Consumer Key or Client ID)
@@ -30,7 +74,7 @@ Update your `.env` file with your Schwab credentials:
 # Schwab API
 SCHWAB_API_KEY=your_app_key_here
 SCHWAB_API_SECRET=your_app_secret_here
-SCHWAB_CALLBACK_URL=http://localhost:8000/auth/callback
+SCHWAB_CALLBACK_URL=https://localhost:8000/auth/callback
 ```
 
 **Security Note:** Never commit the `.env` file or share your credentials.

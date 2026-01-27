@@ -41,6 +41,11 @@ venv.bak/
 # Schwab OAuth tokens
 .schwab_tokens.json
 
+# SSL certificates
+certs/
+*.pem
+*.pfx
+
 # IDE
 .vscode/
 .idea/
