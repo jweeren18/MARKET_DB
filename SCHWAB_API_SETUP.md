@@ -48,9 +48,9 @@ cd backend
 uv run uvicorn app.main:app --reload --port 8000 --ssl-keyfile=../certs/key.pem --ssl-certfile=../certs/cert.pem
 ```
 
-Backend will be available at: **https://localhost:8000**
+Backend will be available at: **https://127.0.0.1:8000** (also accessible at https://localhost:8000)
 
-**Note:** Your browser will show a security warning (self-signed certificate). Click "Advanced" → "Proceed to localhost" to continue.
+**Note:** Your browser will show a security warning (self-signed certificate). Click "Advanced" → "Proceed" to continue.
 
 ## Step 1: Configure Your Schwab App
 
@@ -58,9 +58,9 @@ Backend will be available at: **https://localhost:8000**
 2. Navigate to your application
 3. Configure the **Callback URL** (Redirect URI):
    ```
-   https://localhost:8000/auth/callback
+   https://127.0.0.1:8000/auth/callback
    ```
-   **Important:** This must match exactly with what's in your `.env` file (use HTTPS)
+   **Important:** Use the IP address `127.0.0.1` (not `localhost`). This must match exactly with what's in your `.env` file
 
 4. Note your credentials:
    - **App Key** (also called Consumer Key or Client ID)
@@ -74,7 +74,7 @@ Update your `.env` file with your Schwab credentials:
 # Schwab API
 SCHWAB_API_KEY=your_app_key_here
 SCHWAB_API_SECRET=your_app_secret_here
-SCHWAB_CALLBACK_URL=https://localhost:8000/auth/callback
+SCHWAB_CALLBACK_URL=https://127.0.0.1:8000/auth/callback
 ```
 
 **Security Note:** Never commit the `.env` file or share your credentials.
@@ -109,10 +109,10 @@ This script will:
    - Click "Allow" or "Authorize"
 
 4. **Copy Authorization Code**
-   - You'll be redirected to: `http://localhost:8000/auth/callback?code=AUTHORIZATION_CODE`
+   - You'll be redirected to: `https://127.0.0.1:8000/auth/callback?code=AUTHORIZATION_CODE`
    - The page may show an error (that's okay if you don't have the backend running)
    - Copy the `code` parameter from the URL
-   - Example: If the URL is `http://localhost:8000/auth/callback?code=abc123xyz`, copy `abc123xyz`
+   - Example: If the URL is `https://127.0.0.1:8000/auth/callback?code=abc123xyz`, copy `abc123xyz`
 
 5. **Paste Code into Script**
    - Return to the terminal where the script is running
@@ -232,8 +232,10 @@ uv run python scripts/schwab_oauth.py
 ### Issue: "Invalid callback URL" Error
 
 **Solution:** Ensure your Schwab app's callback URL matches your `.env`:
-- Schwab app: `http://localhost:8000/auth/callback`
-- .env: `SCHWAB_CALLBACK_URL=http://localhost:8000/auth/callback`
+- Schwab app: `https://127.0.0.1:8000/auth/callback`
+- .env: `SCHWAB_CALLBACK_URL=https://127.0.0.1:8000/auth/callback`
+
+**Note:** Use `127.0.0.1` (not `localhost`) - Schwab's validation may reject `localhost`
 
 ### Issue: "Invalid client credentials" Error
 
