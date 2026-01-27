@@ -3,8 +3,19 @@ Configuration management for the Market Intelligence Platform.
 Uses pydantic-settings to load and validate environment variables.
 """
 
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+from dotenv import load_dotenv
+
+# Get project root directory (2 levels up from this file)
+# Must resolve __file__ first before getting parents
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
+
+# Load environment variables from .env file
+load_dotenv(ENV_FILE)
 
 
 class Settings(BaseSettings):
@@ -37,8 +48,6 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000"]
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"
     )
