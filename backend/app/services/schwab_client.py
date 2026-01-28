@@ -45,8 +45,8 @@ class SchwabClient:
         self.api_secret = settings.schwab_api_secret
         self.callback_url = settings.schwab_callback_url
 
-        # Token storage file
-        self.token_file = Path(__file__).parent.parent.parent.parent / ".schwab_tokens.json"
+        # Token storage file (use resolve() to get absolute path)
+        self.token_file = Path(__file__).resolve().parent.parent.parent.parent / ".schwab_tokens.json"
 
         # OAuth client
         self.oauth_client: Optional[OAuth2Client] = None
@@ -125,8 +125,10 @@ class SchwabClient:
                 token_endpoint=self.TOKEN_URL,
             )
 
-            # Exchange code for token
-            token = await self.oauth_client.fetch_token(
+            # Exchange code for token (fetch_token is synchronous, run in thread pool)
+            import asyncio
+            token = await asyncio.to_thread(
+                self.oauth_client.fetch_token,
                 url=self.TOKEN_URL,
                 grant_type="authorization_code",
                 code=authorization_code,
@@ -159,7 +161,9 @@ class SchwabClient:
             if datetime.now() >= expires_at - timedelta(minutes=5):
                 logger.info("Access token expired or expiring soon, refreshing...")
                 try:
-                    new_token = await self.oauth_client.refresh_token(
+                    import asyncio
+                    new_token = await asyncio.to_thread(
+                        self.oauth_client.refresh_token,
                         url=self.TOKEN_URL,
                     )
                     self._save_tokens(new_token)
@@ -186,8 +190,14 @@ class SchwabClient:
         try:
             url = f"{self.BASE_URL}{endpoint}"
 
-            # Use OAuth client to make authenticated request
-            response = await self.oauth_client.get(url, params=params, timeout=30.0)
+            # Use OAuth client to make authenticated request (synchronous, run in thread pool)
+            import asyncio
+            response = await asyncio.to_thread(
+                self.oauth_client.get,
+                url,
+                params=params,
+                timeout=30.0
+            )
             response.raise_for_status()
 
             return response.json()

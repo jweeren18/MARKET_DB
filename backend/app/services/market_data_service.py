@@ -116,7 +116,50 @@ class MarketDataService:
     ) -> List[Dict[str, Any]]:
         """Get price history from Schwab API."""
         from app.services.schwab_client import schwab_client
-        return await schwab_client.get_price_history(symbol, start_date, end_date, interval)
+
+        # Map interval to Schwab API frequency types and period types
+        frequency_map = {
+            "1m": ("minute", "day"),
+            "5m": ("minute", "day"),
+            "15m": ("minute", "day"),
+            "30m": ("minute", "day"),
+            "1h": ("minute", "day"),
+            "1d": ("daily", "month"),  # For daily data, use month or year periodType
+            "1wk": ("weekly", "year"),
+            "1mo": ("monthly", "year")
+        }
+
+        frequency_type, period_type = frequency_map.get(interval, ("daily", "month"))
+
+        # Get the raw API response
+        # For daily data with custom date ranges, use periodType=month or year
+        response = await schwab_client.get_price_history(
+            symbol=symbol,
+            period_type=period_type,
+            start_date=start_date,
+            end_date=end_date,
+            frequency_type=frequency_type,
+            frequency=1
+        )
+
+        # Convert Schwab API response to standardized format
+        candles = []
+        if response and "candles" in response:
+            for candle in response["candles"]:
+                # Convert epoch milliseconds to datetime
+                timestamp = datetime.fromtimestamp(candle["datetime"] / 1000)
+                candles.append({
+                    "datetime": timestamp,
+                    "open": candle["open"],
+                    "high": candle["high"],
+                    "low": candle["low"],
+                    "close": candle["close"],
+                    "volume": candle["volume"],
+                    "adjusted_close": candle["close"]  # Schwab doesn't provide adjusted close separately
+                })
+
+        logger.info(f"Fetched {len(candles)} candles for {symbol} from Schwab API")
+        return candles
 
     async def _get_fundamentals_schwab(self, symbol: str) -> Dict[str, Any]:
         """Get fundamentals from Schwab API."""
