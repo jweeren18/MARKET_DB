@@ -1,8 +1,16 @@
 """
-Data Ingestion DAG
+Historical Data Backfill DAG
 
-Fetches daily market data from Schwab API after market close.
-Runs at 4:00 PM EST Mon-Fri to fetch previous trading day's data.
+One-time or on-demand backfill of historical market data.
+This DAG is manually triggered and not scheduled automatically.
+
+Usage:
+    - Trigger manually from Airflow UI
+    - Configure backfill period using DAG run configuration:
+      {
+        "days": 365,
+        "tickers": "AAPL,MSFT,NVDA"  # Optional, defaults to all active tickers
+      }
 """
 
 from datetime import datetime, timedelta
@@ -18,18 +26,18 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': timedelta(minutes=10),
 }
 
 # DAG definition
 dag = DAG(
-    'data_ingestion_daily',
+    'data_backfill_historical',
     default_args=default_args,
-    description='Daily market data ingestion from Schwab API',
-    schedule_interval='0 16 * * 1-5',  # 4 PM Mon-Fri (after market close)
+    description='Historical market data backfill (manual trigger)',
+    schedule_interval=None,  # Manual trigger only
     start_date=days_ago(1),
     catchup=False,
-    tags=['market-data', 'ingestion', 'daily'],
+    tags=['market-data', 'backfill', 'historical'],
 )
 
 # Environment variables for the pod
@@ -55,15 +63,20 @@ volume = k8s.V1Volume(
     )
 )
 
-# Kubernetes Pod Operator - Daily Data Ingestion
-# Fetches yesterday's data for all active tickers
-ingest_daily_data_task = KubernetesPodOperator(
-    task_id='ingest_daily_market_data',
-    name='data-ingestion-daily-pod',
+# Kubernetes Pod Operator - Historical Backfill
+# Fetches historical data based on DAG run configuration
+backfill_task = KubernetesPodOperator(
+    task_id='backfill_historical_data',
+    name='data-backfill-historical-pod',
     namespace='default',  # Change to your namespace
     image='market-intelligence-jobs:latest',  # Your Docker image
     cmds=['python'],
-    arguments=['jobs/data_ingestion.py', '--all', '--days', '1'],
+    arguments=[
+        'jobs/data_ingestion.py',
+        '--all',  # Fetch for all active tickers
+        '--days',
+        '{{ dag_run.conf.get("days", 365) }}',  # Default to 1 year of history
+    ],
     env_vars=env_vars,
     # volumes=[volume],
     # volume_mounts=[volume_mount],
@@ -74,10 +87,12 @@ ingest_daily_data_task = KubernetesPodOperator(
     # For production, remove config_file and set in_cluster=True
     dag=dag,
     resources=k8s.V1ResourceRequirements(
-        requests={'memory': '512Mi', 'cpu': '500m'},
-        limits={'memory': '1Gi', 'cpu': '1000m'}
+        requests={'memory': '1Gi', 'cpu': '1000m'},
+        limits={'memory': '2Gi', 'cpu': '2000m'}
     ),
+    # Longer timeout for historical data
+    execution_timeout=timedelta(hours=2),
 )
 
 # Task dependencies (single task in this DAG)
-ingest_daily_data_task
+backfill_task
