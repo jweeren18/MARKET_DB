@@ -108,9 +108,174 @@ class APIClient:
                     f"{self.base_url}/api/tickers/{symbol}/history",
                     params=params
                 )
-                return self._handle_response(response)
+                result = self._handle_response(response)
+                # Extract the history list from the response
+                if result and isinstance(result, dict) and "history" in result:
+                    return result["history"]
+                return result
         except Exception as e:
             st.error(f"Error fetching price history: {str(e)}")
+            return None
+
+    # Analytics APIs
+    def get_portfolio_analytics(self, portfolio_id: str) -> Optional[Dict]:
+        """Get portfolio analytics (P&L, returns, risk metrics)."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/portfolios/{portfolio_id}/analytics")
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching portfolio analytics: {str(e)}")
+            return None
+
+    # Indicator APIs
+    def get_latest_indicators(self, ticker: str) -> Optional[Dict]:
+        """Get latest indicator values for a ticker."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/indicators/tickers/{ticker}/latest")
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching indicators: {str(e)}")
+            return None
+
+    def get_indicator_history(
+        self,
+        ticker: str,
+        indicator_name: Optional[str] = None,
+        days: int = 30
+    ) -> Optional[List[Dict]]:
+        """Get historical indicator values."""
+        try:
+            params = {"days": days}
+            if indicator_name:
+                params["indicator_name"] = indicator_name
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(
+                    f"{self.base_url}/api/indicators/tickers/{ticker}/history",
+                    params=params
+                )
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching indicator history: {str(e)}")
+            return None
+
+    def get_indicator_summary(self, ticker: str) -> Optional[Dict]:
+        """Get indicator summary with latest values."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/indicators/tickers/{ticker}/summary")
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching indicator summary: {str(e)}")
+            return None
+
+    def detect_signals(self, ticker: str) -> Optional[Dict]:
+        """Detect trading signals for a ticker."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/indicators/tickers/{ticker}/signals")
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error detecting signals: {str(e)}")
+            return None
+
+    # Opportunity APIs
+    def list_opportunities(
+        self,
+        min_score: float = 0,
+        min_confidence: float = 0,
+        limit: int = 50,
+        sort_by: str = "score"
+    ) -> Optional[Dict]:
+        """List all scored opportunities with filtering."""
+        try:
+            params = {
+                "min_score": min_score,
+                "min_confidence": min_confidence,
+                "limit": limit,
+                "sort_by": sort_by
+            }
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/opportunities", params=params)
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching opportunities: {str(e)}")
+            return None
+
+    def get_opportunity(
+        self,
+        ticker: str,
+        include_history: bool = False,
+        history_days: int = 30
+    ) -> Optional[Dict]:
+        """Get detailed opportunity score for a ticker."""
+        try:
+            params = {
+                "include_history": include_history,
+                "history_days": history_days
+            }
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/opportunities/{ticker}", params=params)
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching opportunity: {str(e)}")
+            return None
+
+    def get_opportunity_components(self, ticker: str) -> Optional[Dict]:
+        """Get detailed component breakdown for a ticker."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/opportunities/{ticker}/components")
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching components: {str(e)}")
+            return None
+
+    def get_opportunity_explainability(self, ticker: str) -> Optional[Dict]:
+        """Get full explainability (key drivers, risks, reasoning)."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(f"{self.base_url}/api/opportunities/{ticker}/explainability")
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching explainability: {str(e)}")
+            return None
+
+    def get_opportunity_history(self, ticker: str, days: int = 30) -> Optional[Dict]:
+        """Get historical opportunity scores."""
+        try:
+            params = {"days": days}
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(
+                    f"{self.base_url}/api/opportunities/history/{ticker}",
+                    params=params
+                )
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching opportunity history: {str(e)}")
+            return None
+
+    def get_top_opportunities(
+        self,
+        category: str = "highest_score",
+        limit: int = 10,
+        min_confidence: float = 50.0
+    ) -> Optional[Dict]:
+        """Get top opportunities by category."""
+        try:
+            params = {
+                "limit": limit,
+                "min_confidence": min_confidence
+            }
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.get(
+                    f"{self.base_url}/api/opportunities/top/{category}",
+                    params=params
+                )
+                return self._handle_response(response)
+        except Exception as e:
+            st.error(f"Error fetching top opportunities: {str(e)}")
             return None
 
     # Health check

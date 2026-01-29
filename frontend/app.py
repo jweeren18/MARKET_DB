@@ -13,6 +13,9 @@ BACKEND_PATH = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(BACKEND_PATH))
 
 from utils.config import get_api_url
+from components.opportunity_radar import render_opportunity_radar
+from components.portfolio_overview import render_portfolio_overview
+from components.ticker_deep_dive import render_ticker_deep_dive
 
 
 def main():
@@ -55,8 +58,9 @@ def main():
         )
 
         st.markdown("---")
-        st.caption("Phase 1B: Data Ingestion Complete")
-        st.caption("Next: Analytics Service (Phase 1C)")
+        st.caption("✅ Phase 1A-1D Complete")
+        st.caption("📊 Current: Frontend (Phase 1E)")
+        st.caption("🚀 Backend API Ready!")
 
     # Main content area
     if page == "Dashboard":
@@ -77,16 +81,21 @@ def show_dashboard():
     st.markdown("### Welcome to your personal investment intelligence platform")
 
     st.info("""
-        **Current Status (Phase 1B):**
-        - ✅ Backend API operational
-        - ✅ PostgreSQL + TimescaleDB configured
-        - ✅ Market data ingestion (yfinance)
-        - ✅ 21 sample tickers seeded
+        **Current Status (Phase 1A-1D Complete):**
+        - ✅ Backend API operational (FastAPI + PostgreSQL + TimescaleDB)
+        - ✅ Schwab API integration with OAuth 2.0
+        - ✅ 2 years historical data (10,578 records, 21 tickers)
+        - ✅ Portfolio analytics (P&L, returns, risk metrics)
+        - ✅ Technical indicators (20+ indicators calculated daily)
+        - ✅ Signal detection (RSI, MACD, Bollinger Bands, etc.)
+        - ✅ 10x Opportunity Scorer (rule-based with full explainability)
+        - ✅ Automated daily scoring via Airflow
 
-        **Coming Soon:**
-        - Portfolio analytics (Phase 1C)
-        - Technical indicators (Phase 1D)
-        - 10x opportunity scoring (Phase 1E)
+        **Phase 1E (Current):**
+        - 🚧 Building Streamlit frontend
+        - 🚧 Opportunity Radar dashboard
+        - 🚧 Portfolio visualizations
+        - 🚧 Interactive charts
     """)
 
     # Placeholder metrics
@@ -107,52 +116,17 @@ def show_dashboard():
 
 def show_portfolio():
     """Portfolio overview page."""
-    st.title("Portfolio Overview")
-    st.info("Portfolio analytics coming in Phase 1C")
-
-    st.markdown("### Planned Features:")
-    st.markdown("""
-    - Holdings table with live prices
-    - Allocation charts (sector, market cap, asset type)
-    - Performance charts (TWR/MWR)
-    - Risk metrics dashboard
-    - Transaction history
-    """)
+    render_portfolio_overview()
 
 
 def show_opportunities():
     """Opportunity radar page."""
-    st.title("Opportunity Radar")
-    st.info("10x opportunity scoring coming in Phase 1E")
-
-    st.markdown("### Planned Features:")
-    st.markdown("""
-    - Sortable/filterable opportunity table
-    - Score badges with color coding
-    - Confidence indicators
-    - Score breakdown visualizations
-    - Bull/base/bear scenario charts
-    """)
+    render_opportunity_radar()
 
 
 def show_asset_deep_dive():
     """Asset deep dive page."""
-    st.title("Asset Deep Dive")
-
-    # Ticker input
-    ticker = st.text_input("Enter ticker symbol:", value="AAPL").upper()
-
-    if ticker:
-        st.info(f"Technical indicators and opportunity scores for {ticker} coming in Phases 1D-1E")
-
-        st.markdown("### Planned Features:")
-        st.markdown("""
-        - Interactive price chart with technical overlays
-        - Technical indicators panel (RSI, MACD, etc.)
-        - Fundamental metrics grid
-        - Opportunity score card with explainability
-        - Key drivers and risks
-        """)
+    render_ticker_deep_dive()
 
 
 def show_settings():
