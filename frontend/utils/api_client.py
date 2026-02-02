@@ -186,7 +186,8 @@ class APIClient:
         min_score: float = 0,
         min_confidence: float = 0,
         limit: int = 50,
-        sort_by: str = "score"
+        sort_by: str = "score",
+        include_details: bool = False
     ) -> Optional[Dict]:
         """List all scored opportunities with filtering."""
         try:
@@ -194,7 +195,8 @@ class APIClient:
                 "min_score": min_score,
                 "min_confidence": min_confidence,
                 "limit": limit,
-                "sort_by": sort_by
+                "sort_by": sort_by,
+                "include_details": include_details
             }
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.get(f"{self.base_url}/api/opportunities", params=params)

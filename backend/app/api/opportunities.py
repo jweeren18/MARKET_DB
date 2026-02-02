@@ -21,6 +21,7 @@ def list_opportunities(
     min_confidence: float = Query(0, ge=0, le=100, description="Minimum confidence level"),
     limit: int = Query(50, ge=1, le=500, description="Maximum results to return"),
     sort_by: str = Query("score", description="Sort by: score, confidence, ticker"),
+    include_details: bool = Query(False, description="Include full components and explainability"),
     db: Session = Depends(get_db)
 ):
     """
@@ -56,19 +57,28 @@ def list_opportunities(
         # Apply limit
         opportunities = query.limit(limit).all()
 
+        # Build opportunity list with optional details
+        opp_list = []
+        for opp in opportunities:
+            opp_data = {
+                "ticker": opp.ticker,
+                "score": float(opp.overall_score),
+                "confidence": float(opp.confidence_level),
+                "timestamp": opp.timestamp,
+                "bull_case": float(opp.bull_case) if opp.bull_case else None,
+                "base_case": float(opp.base_case) if opp.base_case else None,
+                "bear_case": float(opp.bear_case) if opp.bear_case else None,
+            }
+
+            # Include full details if requested
+            if include_details:
+                opp_data["components"] = opp.component_scores
+                opp_data["explanation"] = opp.explanation
+
+            opp_list.append(opp_data)
+
         return {
-            "opportunities": [
-                {
-                    "ticker": opp.ticker,
-                    "score": float(opp.overall_score),
-                    "confidence": float(opp.confidence_level),
-                    "timestamp": opp.timestamp,
-                    "bull_case": float(opp.bull_case) if opp.bull_case else None,
-                    "base_case": float(opp.base_case) if opp.base_case else None,
-                    "bear_case": float(opp.bear_case) if opp.bear_case else None,
-                }
-                for opp in opportunities
-            ],
+            "opportunities": opp_list,
             "count": len(opportunities),
             "filters": {
                 "min_score": min_score,

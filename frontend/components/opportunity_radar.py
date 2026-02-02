@@ -39,13 +39,14 @@ def render_opportunity_radar():
 
     st.markdown("---")
 
-    # Fetch opportunities
+    # Fetch opportunities with full details in one API call
     with st.spinner("Loading opportunities..."):
         result = api.list_opportunities(
             min_score=min_score,
             min_confidence=min_confidence,
             limit=limit,
-            sort_by=sort_by
+            sort_by=sort_by,
+            include_details=True  # Get all data in one API call for faster loading
         )
 
     if not result or "error" in result:
@@ -80,10 +81,10 @@ def render_opportunity_radar():
     st.markdown("### 📊 Scored Opportunities")
 
     for opp in opportunities:
-        render_opportunity_card(opp, api)
+        render_opportunity_card(opp)
 
 
-def render_opportunity_card(opp: Dict, api):
+def render_opportunity_card(opp: Dict):
     """Render an expandable opportunity card."""
     ticker = opp["ticker"]
     score = opp["score"]
@@ -111,15 +112,34 @@ def render_opportunity_card(opp: Dict, api):
 
     # Card header
     with st.expander(f"**{ticker}** | Score: **{score:.1f}** {badge} | Confidence: **{confidence:.0f}%** | {timestamp}", expanded=False):
-        # Fetch detailed data
-        with st.spinner(f"Loading details for {ticker}..."):
-            details = api.get_opportunity(ticker, include_history=False)
-            explainability = api.get_opportunity_explainability(ticker)
-            components_data = api.get_opportunity_components(ticker)
-
-        if not details or "error" in details:
-            st.warning(f"Could not load details for {ticker}")
+        # Use pre-loaded data from the list API call
+        if "explanation" not in opp or "components" not in opp:
+            st.warning(f"Detailed data not available for {ticker}")
             return
+
+        # Extract data for rendering tabs
+        explanation = opp["explanation"]
+
+        # Build details object for overview and scenarios tabs
+        details = {
+            "ticker": ticker,
+            "score": score,
+            "confidence": confidence,
+            "timestamp": timestamp,
+            "scenarios": explanation.get("scenarios", {})
+        }
+
+        # Build components data for components tab
+        components_data = {
+            "components": opp["components"]
+        }
+
+        # Explainability is already in the right format
+        explainability = {
+            "key_drivers": explanation.get("key_drivers", []),
+            "risks": explanation.get("risks", []),
+            "components": explanation.get("components", {})
+        }
 
         # Tabs for different views
         tab1, tab2, tab3, tab4 = st.tabs(["📈 Overview", "🔍 Components", "💡 Explainability", "📊 Scenarios"])
