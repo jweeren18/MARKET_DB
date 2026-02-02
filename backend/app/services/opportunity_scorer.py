@@ -20,7 +20,7 @@ Returns scores 0-100 with:
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import logging
 import numpy as np
@@ -157,7 +157,7 @@ class OpportunityScorer:
             "ticker": ticker,
             "overall_score": round(overall_score, 2),
             "confidence": round(confidence, 2),
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "components": components,
             "scenarios": scenarios,
             "key_drivers": key_drivers,
@@ -525,7 +525,7 @@ class OpportunityScorer:
         # Data freshness penalty (assume data should be from last 2 days)
         if price_data:
             latest_date = price_data[-1]['timestamp']
-            days_old = (datetime.now() - latest_date).days
+            days_old = (datetime.now(timezone.utc) - latest_date).days
             if days_old > 2:
                 confidence -= min(days_old * 3, 20)
 
@@ -580,7 +580,8 @@ class OpportunityScorer:
                 # Get best detail from component
                 details = comp_data["details"]
                 for detail_name, detail_data in details.items():
-                    if detail_data.get("value", 0) > 3:
+                    # Skip non-dict entries (like "sector": "Technology")
+                    if isinstance(detail_data, dict) and detail_data.get("value", 0) > 3:
                         drivers.append(detail_data["reason"])
 
         return drivers[:5]  # Top 5
@@ -597,7 +598,8 @@ class OpportunityScorer:
                 # Get worst detail from component
                 details = comp_data["details"]
                 for detail_name, detail_data in details.items():
-                    if detail_data.get("value", 0) < -3:
+                    # Skip non-dict entries (like "sector": "Technology")
+                    if isinstance(detail_data, dict) and detail_data.get("value", 0) < -3:
                         risks.append(detail_data["reason"])
 
         return risks[:5]  # Top 5
@@ -608,7 +610,8 @@ class OpportunityScorer:
         days: int
     ) -> List[Dict]:
         """Get recent price data for a ticker."""
-        end_date = datetime.now()
+        from datetime import timezone
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
 
         price_records = self.db.query(PriceData).filter(
@@ -635,7 +638,7 @@ class OpportunityScorer:
             "ticker": ticker,
             "overall_score": 0,
             "confidence": 0,
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(timezone.utc),
             "error": "Insufficient data for scoring",
             "message": "Ticker needs more price data and calculated indicators"
         }

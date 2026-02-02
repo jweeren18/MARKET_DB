@@ -28,6 +28,20 @@ from app.models import OpportunityScore
 from app.services.opportunity_scorer import OpportunityScorer
 
 
+def make_json_serializable(obj):
+    """Convert datetime objects to ISO format strings for JSON serialization."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_serializable(item) for item in obj]
+    elif isinstance(obj, Decimal):
+        return float(obj)
+    else:
+        return obj
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -60,8 +74,8 @@ def score_and_store_ticker(
             timestamp=result["timestamp"],
             overall_score=Decimal(str(result["overall_score"])),
             confidence_level=Decimal(str(result["confidence"])),
-            component_scores=result["components"],
-            explanation=result,  # Store full explanation as JSON
+            component_scores=make_json_serializable(result["components"]),
+            explanation=make_json_serializable(result),  # Store full explanation as JSON
             bull_case=Decimal(str(result["scenarios"]["bull"])),
             base_case=Decimal(str(result["scenarios"]["base"])),
             bear_case=Decimal(str(result["scenarios"]["bear"]))
@@ -77,8 +91,8 @@ def score_and_store_ticker(
             # Update existing
             existing.overall_score = score_record.overall_score
             existing.confidence_level = score_record.confidence_level
-            existing.component_scores = score_record.component_scores
-            existing.explanation = score_record.explanation
+            existing.component_scores = make_json_serializable(result["components"])
+            existing.explanation = make_json_serializable(result)
             existing.bull_case = score_record.bull_case
             existing.base_case = score_record.base_case
             existing.bear_case = score_record.bear_case
@@ -146,8 +160,8 @@ def score_all_tickers(
                     timestamp=full_result["timestamp"],
                     overall_score=Decimal(str(full_result["overall_score"])),
                     confidence_level=Decimal(str(full_result["confidence"])),
-                    component_scores=full_result["components"],
-                    explanation=full_result,
+                    component_scores=make_json_serializable(full_result["components"]),
+                    explanation=make_json_serializable(full_result),
                     bull_case=Decimal(str(full_result["scenarios"]["bull"])),
                     base_case=Decimal(str(full_result["scenarios"]["base"])),
                     bear_case=Decimal(str(full_result["scenarios"]["bear"]))
@@ -162,8 +176,8 @@ def score_all_tickers(
                 if existing:
                     existing.overall_score = score_record.overall_score
                     existing.confidence_level = score_record.confidence_level
-                    existing.component_scores = score_record.component_scores
-                    existing.explanation = score_record.explanation
+                    existing.component_scores = make_json_serializable(full_result["components"])
+                    existing.explanation = make_json_serializable(full_result)
                     existing.bull_case = score_record.bull_case
                     existing.base_case = score_record.base_case
                     existing.bear_case = score_record.bear_case
