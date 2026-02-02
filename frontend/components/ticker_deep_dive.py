@@ -117,8 +117,36 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
     """Render price chart with technical overlays."""
     st.markdown("#### Price Chart with Technical Indicators")
 
+    # Time range selector
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        time_range = st.selectbox(
+            "Time Range",
+            options=["5 Days", "7 Days", "1 Month", "3 Months", "YTD", "1 Year", "5 Years"],
+            index=3,  # Default to 3 Months
+            help="Select time range for price chart"
+        )
+
+    # Calculate days based on selection
+    range_map = {
+        "5 Days": 5,
+        "7 Days": 7,
+        "1 Month": 30,
+        "3 Months": 90,
+        "YTD": (datetime.now() - datetime(datetime.now().year, 1, 1)).days,
+        "1 Year": 365,
+        "5 Years": 1825
+    }
+    days = range_map[time_range]
+
+    # Fetch data for selected range
+    with st.spinner(f"Loading {time_range} of data..."):
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        price_history = api.get_price_history(ticker, start_date=start_date)
+        indicator_history = api.get_indicator_history(ticker, days=days) if indicators else None
+
     if not price_history or len(price_history) == 0:
-        st.warning("No price history available")
+        st.warning(f"No price history available for {time_range}")
         return
 
     # Convert to dataframe
@@ -140,37 +168,34 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
     ))
 
     # Add moving averages if available
-    if indicators and "sma_20" in indicators:
-        # Fetch indicator history for overlays
-        indicator_history = api.get_indicator_history(ticker, days=90)
-        if indicator_history:
-            ind_df = pd.DataFrame(indicator_history)
-            ind_df["timestamp"] = pd.to_datetime(ind_df["timestamp"])
+    if indicators and indicator_history:
+        ind_df = pd.DataFrame(indicator_history)
+        ind_df["timestamp"] = pd.to_datetime(ind_df["timestamp"])
 
-            # SMA 20
-            sma20_data = ind_df[ind_df["indicator_name"] == "sma_20"]
-            if not sma20_data.empty:
-                fig.add_trace(go.Scatter(
-                    x=sma20_data["timestamp"],
-                    y=sma20_data["value"],
-                    mode="lines",
-                    name="SMA 20",
-                    line=dict(color="orange", width=1)
-                ))
+        # SMA 20
+        sma20_data = ind_df[ind_df["indicator_name"] == "sma_20"]
+        if not sma20_data.empty:
+            fig.add_trace(go.Scatter(
+                x=sma20_data["timestamp"],
+                y=sma20_data["value"],
+                mode="lines",
+                name="SMA 20",
+                line=dict(color="orange", width=1)
+            ))
 
-            # SMA 50
-            sma50_data = ind_df[ind_df["indicator_name"] == "sma_50"]
-            if not sma50_data.empty:
-                fig.add_trace(go.Scatter(
-                    x=sma50_data["timestamp"],
-                    y=sma50_data["value"],
-                    mode="lines",
-                    name="SMA 50",
-                    line=dict(color="blue", width=1)
-                ))
+        # SMA 50
+        sma50_data = ind_df[ind_df["indicator_name"] == "sma_50"]
+        if not sma50_data.empty:
+            fig.add_trace(go.Scatter(
+                x=sma50_data["timestamp"],
+                y=sma50_data["value"],
+                mode="lines",
+                name="SMA 50",
+                line=dict(color="blue", width=1)
+            ))
 
     fig.update_layout(
-        title=f"{ticker} Price Chart (90 Days)",
+        title=f"{ticker} Price Chart ({time_range})",
         yaxis_title="Price ($)",
         xaxis_title="Date",
         height=500,

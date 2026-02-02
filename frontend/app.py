@@ -18,6 +18,102 @@ from components.portfolio_overview import render_portfolio_overview
 from components.ticker_deep_dive import render_ticker_deep_dive
 
 
+def apply_theme(theme: str):
+    """Apply custom CSS based on selected theme."""
+    if theme == 'dark':
+        st.markdown("""
+            <style>
+            /* Dark theme colors */
+            :root {
+                --bg-color: #0E1117;
+                --secondary-bg: #262730;
+                --text-color: #FAFAFA;
+                --primary-color: #3B82F6;
+            }
+
+            /* Override Streamlit defaults */
+            .stApp {
+                background-color: #0E1117;
+            }
+
+            .main > div {
+                padding-top: 2rem;
+            }
+
+            h1, h2, h3, h4, h5, h6 {
+                color: #3B82F6 !important;
+            }
+
+            .stMetric {
+                background-color: #262730 !important;
+                padding: 1rem;
+                border-radius: 0.5rem;
+                border: 1px solid #3B3B3B;
+            }
+
+            .stMetric label {
+                color: #FAFAFA !important;
+            }
+
+            /* Sidebar styling */
+            [data-testid="stSidebar"] {
+                background-color: #262730;
+            }
+
+            /* Cards and containers */
+            .element-container {
+                color: #FAFAFA;
+            }
+
+            /* Expanders */
+            .streamlit-expanderHeader {
+                background-color: #262730 !important;
+                color: #FAFAFA !important;
+            }
+
+            /* Tables */
+            .dataframe {
+                color: #FAFAFA !important;
+            }
+
+            /* Buttons */
+            .stButton button {
+                background-color: #3B82F6;
+                color: white;
+            }
+
+            /* Text inputs */
+            .stTextInput input {
+                background-color: #262730 !important;
+                color: #FAFAFA !important;
+                border: 1px solid #3B3B3B;
+            }
+
+            /* Select boxes */
+            .stSelectbox [data-baseweb="select"] {
+                background-color: #262730 !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+    else:
+        # Light theme (default)
+        st.markdown("""
+            <style>
+            .main > div {
+                padding-top: 2rem;
+            }
+            h1, h2, h3 {
+                color: #1E40AF;
+            }
+            .stMetric {
+                background-color: #F9FAFB;
+                padding: 1rem;
+                border-radius: 0.5rem;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+
 def main():
     """Main Streamlit application."""
 
@@ -29,22 +125,12 @@ def main():
         initial_sidebar_state="expanded",
     )
 
-    # Custom CSS
-    st.markdown("""
-        <style>
-        .main > div {
-            padding-top: 2rem;
-        }
-        h1 {
-            color: #1E40AF;
-        }
-        .stMetric {
-            background-color: #F9FAFB;
-            padding: 1rem;
-            border-radius: 0.5rem;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # Initialize theme in session state
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'light'
+
+    # Apply theme CSS
+    apply_theme(st.session_state.theme)
 
     # Sidebar navigation
     with st.sidebar:
@@ -56,6 +142,17 @@ def main():
             ["Dashboard", "Portfolio", "Opportunities", "Asset Deep Dive", "Settings"],
             label_visibility="collapsed"
         )
+
+        st.markdown("---")
+
+        # Theme toggle
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.caption("Theme")
+        with col2:
+            if st.button("🌓", help="Toggle dark/light mode", key="theme_toggle"):
+                st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+                st.rerun()
 
         st.markdown("---")
         st.caption("✅ Phase 1A-1D Complete")
