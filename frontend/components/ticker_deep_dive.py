@@ -139,6 +139,17 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
     with col3:
         show_sma = st.checkbox("Show SMA Lines", value=False, help="Toggle SMA 50 and SMA 200 overlays")
 
+    # Define actual visible days for each time range
+    actual_days = {
+        "5 Days": 5,
+        "7 Days": 7,
+        "1 Month": 30,
+        "3 Months": 90,
+        "YTD": (datetime.now() - datetime(datetime.now().year, 1, 1)).days,
+        "1 Year": 365,
+        "5 Years": 1825
+    }
+
     # Calculate days based on selection (add buffer for moving averages)
     range_map = {
         "5 Days": 5,
@@ -180,15 +191,6 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
     df = df.sort_values("timestamp")
 
     # Filter to actual requested range (remove buffer)
-    actual_days = {
-        "5 Days": 5,
-        "7 Days": 7,
-        "1 Month": 30,
-        "3 Months": 90,
-        "YTD": (datetime.now() - datetime(datetime.now().year, 1, 1)).days,
-        "1 Year": 365,
-        "5 Years": 1825
-    }
     cutoff_date = pd.Timestamp(datetime.now() - timedelta(days=actual_days[time_range]), tz='UTC')
     df = df[df["timestamp"] >= cutoff_date]
 
