@@ -64,7 +64,9 @@ def test_score_single_ticker(db: Session, ticker: str):
             # Print top detail
             if comp_data['details']:
                 first_detail = list(comp_data['details'].values())[0]
-                print(f"    Sample: {first_detail['reason']}")
+                # Skip non-dict entries (like "sector": "Technology")
+                if isinstance(first_detail, dict):
+                    print(f"    Sample: {first_detail['reason']}")
 
         # Print key drivers
         if result['key_drivers']:
@@ -183,8 +185,12 @@ def test_component_scores(db: Session, ticker: str):
 
             for detail_name, detail_data in comp_data['details'].items():
                 print(f"    {detail_name.replace('_', ' ').title()}:")
-                print(f"      Value: {detail_data.get('value', 0):.2f}")
-                print(f"      {detail_data['reason']}")
+                # Skip non-dict entries (like "sector": "Technology")
+                if isinstance(detail_data, dict):
+                    print(f"      Value: {detail_data.get('value', 0):.2f}")
+                    print(f"      {detail_data['reason']}")
+                else:
+                    print(f"      {detail_data}")
 
             print()
 

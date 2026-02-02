@@ -223,6 +223,11 @@ def render_components_tab(components_data: Dict):
             if details:
                 st.markdown("**Factors:**")
                 for factor_name, factor_data in details.items():
+                    # Skip non-dict entries (like "sector": "Technology")
+                    if not isinstance(factor_data, dict):
+                        st.markdown(f"- **{factor_name.replace('_', ' ').title()}:** {factor_data}")
+                        continue
+
                     value = factor_data.get("value", "N/A")
                     reason = factor_data.get("reason", "No reason provided")
                     st.markdown(f"- **{factor_name.replace('_', ' ').title()}:** {value}")
