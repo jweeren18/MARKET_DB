@@ -147,15 +147,52 @@ class APIClient:
     ) -> Optional[List[Dict]]:
         """Get historical indicator values."""
         try:
-            params = {"days": days}
+            from datetime import datetime, timedelta
+
+            # Convert days to start_date for the API
+            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+            params = {
+                "start_date": start_date,
+                "limit": 1000  # Increase limit to ensure we get enough data for all indicators
+            }
             if indicator_name:
                 params["indicator_name"] = indicator_name
+
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.get(
                     f"{self.base_url}/api/indicators/tickers/{ticker}/history",
                     params=params
                 )
-                return self._handle_response(response)
+                result = self._handle_response(response)
+
+                # If result is None or has error, return as-is
+                if not result or "error" in result:
+                    return result
+
+                # Check if response is in grouped format (when indicator_name not specified)
+                if isinstance(result, dict) and "history" in result:
+                    history = result["history"]
+
+                    # If history is a dict (grouped by indicator name), flatten it
+                    if isinstance(history, dict):
+                        flattened = []
+                        for ind_name, records in history.items():
+                            for record in records:
+                                flattened.append({
+                                    "timestamp": record["timestamp"],
+                                    "indicator_name": ind_name,
+                                    "value": record["value"],
+                                    "meta": record.get("meta")
+                                })
+                        return flattened
+
+                    # If history is a list (specific indicator), extract it
+                    elif isinstance(history, list):
+                        return history
+
+                # Fallback: return result as-is
+                return result
         except Exception as e:
             st.error(f"Error fetching indicator history: {str(e)}")
             return None

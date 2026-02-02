@@ -117,8 +117,9 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
     """Render price chart with technical overlays."""
     st.markdown("#### Price Chart with Technical Indicators")
 
-    # Time range selector
-    col1, col2, col3 = st.columns([2, 2, 1])
+    # Chart controls
+    col1, col2, col3 = st.columns([2, 2, 2])
+
     with col1:
         time_range = st.selectbox(
             "Time Range",
@@ -127,23 +128,47 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
             help="Select time range for price chart"
         )
 
-    # Calculate days based on selection
+    with col2:
+        chart_type = st.selectbox(
+            "Chart Type",
+            options=["Line", "Candlestick"],
+            index=0,  # Default to Line
+            help="Select chart type"
+        )
+
+    with col3:
+        show_sma = st.checkbox("Show SMA Lines", value=False, help="Toggle SMA 50 and SMA 200 overlays")
+
+    # Calculate days based on selection (add buffer for moving averages)
     range_map = {
         "5 Days": 5,
         "7 Days": 7,
         "1 Month": 30,
-        "3 Months": 90,
-        "YTD": (datetime.now() - datetime(datetime.now().year, 1, 1)).days,
-        "1 Year": 365,
-        "5 Years": 1825
+        "3 Months": 100,  # Add buffer for missing data
+        "YTD": (datetime.now() - datetime(datetime.now().year, 1, 1)).days + 10,
+        "1 Year": 380,  # Add buffer
+        "5 Years": 1900  # Add buffer
     }
     days = range_map[time_range]
 
-    # Fetch data for selected range
-    with st.spinner(f"Loading {time_range} of data..."):
-        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        price_history = api.get_price_history(ticker, start_date=start_date)
-        indicator_history = api.get_indicator_history(ticker, days=days) if indicators else None
+    # Initialize session state for caching data per ticker
+    cache_key = f"{ticker}_price_data"
+    indicator_cache_key = f"{ticker}_indicator_data"
+
+    if cache_key not in st.session_state or st.session_state.get(f"{ticker}_last_range") != time_range:
+        # Fetch data for selected range
+        with st.spinner(f"Loading {time_range} of data..."):
+            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+            st.session_state[cache_key] = api.get_price_history(ticker, start_date=start_date)
+
+            # Fetch indicator history with extra buffer to ensure full coverage
+            # Use actual visible days + 200 so SMA 200 can be calculated from the start of the visible range
+            indicator_days = actual_days[time_range] + 200
+            st.session_state[indicator_cache_key] = api.get_indicator_history(ticker, days=indicator_days) if indicators else None
+            st.session_state[f"{ticker}_last_range"] = time_range
+
+    price_history = st.session_state[cache_key]
+    indicator_history = st.session_state[indicator_cache_key]
 
     if not price_history or len(price_history) == 0:
         st.warning(f"No price history available for {time_range}")
@@ -154,44 +179,72 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.sort_values("timestamp")
 
-    # Create candlestick chart
+    # Filter to actual requested range (remove buffer)
+    actual_days = {
+        "5 Days": 5,
+        "7 Days": 7,
+        "1 Month": 30,
+        "3 Months": 90,
+        "YTD": (datetime.now() - datetime(datetime.now().year, 1, 1)).days,
+        "1 Year": 365,
+        "5 Years": 1825
+    }
+    cutoff_date = pd.Timestamp(datetime.now() - timedelta(days=actual_days[time_range]), tz='UTC')
+    df = df[df["timestamp"] >= cutoff_date]
+
+    # Create chart
     fig = go.Figure()
 
-    # Candlestick
-    fig.add_trace(go.Candlestick(
-        x=df["timestamp"],
-        open=df["open"],
-        high=df["high"],
-        low=df["low"],
-        close=df["close"],
-        name="Price"
-    ))
+    if chart_type == "Candlestick":
+        # Candlestick chart
+        fig.add_trace(go.Candlestick(
+            x=df["timestamp"],
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"],
+            name="Price"
+        ))
+    else:
+        # Line chart
+        fig.add_trace(go.Scatter(
+            x=df["timestamp"],
+            y=df["close"],
+            mode="lines",
+            name="Price",
+            line=dict(color="#1E40AF", width=2)
+        ))
 
-    # Add moving averages if available
-    if indicators and indicator_history:
+    # Add moving averages if enabled
+    if show_sma and indicator_history:
         ind_df = pd.DataFrame(indicator_history)
         ind_df["timestamp"] = pd.to_datetime(ind_df["timestamp"])
 
-        # SMA 20
-        sma20_data = ind_df[ind_df["indicator_name"] == "sma_20"]
-        if not sma20_data.empty:
-            fig.add_trace(go.Scatter(
-                x=sma20_data["timestamp"],
-                y=sma20_data["value"],
-                mode="lines",
-                name="SMA 20",
-                line=dict(color="orange", width=1)
-            ))
+        # Filter indicator data to match price data range
+        ind_df = ind_df[ind_df["timestamp"] >= cutoff_date]
 
         # SMA 50
-        sma50_data = ind_df[ind_df["indicator_name"] == "sma_50"]
+        sma50_data = ind_df[ind_df["indicator_name"] == "sma_50"].sort_values("timestamp")
         if not sma50_data.empty:
             fig.add_trace(go.Scatter(
                 x=sma50_data["timestamp"],
                 y=sma50_data["value"],
                 mode="lines",
                 name="SMA 50",
-                line=dict(color="blue", width=1)
+                line=dict(color="orange", width=1.5),
+                visible=True
+            ))
+
+        # SMA 200
+        sma200_data = ind_df[ind_df["indicator_name"] == "sma_200"].sort_values("timestamp")
+        if not sma200_data.empty:
+            fig.add_trace(go.Scatter(
+                x=sma200_data["timestamp"],
+                y=sma200_data["value"],
+                mode="lines",
+                name="SMA 200",
+                line=dict(color="purple", width=1.5),
+                visible=True
             ))
 
     fig.update_layout(
@@ -199,7 +252,8 @@ def render_price_chart_tab(ticker: str, price_history: List[Dict], indicators: D
         yaxis_title="Price ($)",
         xaxis_title="Date",
         height=500,
-        xaxis_rangeslider_visible=False
+        xaxis_rangeslider_visible=False,
+        hovermode="x unified"
     )
 
     st.plotly_chart(fig, use_container_width=True)

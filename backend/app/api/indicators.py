@@ -49,40 +49,89 @@ def get_latest_indicators(
 @router.get("/tickers/{ticker}/history")
 def get_indicator_history(
     ticker: str,
-    indicator_name: str = Query(..., description="Indicator name (e.g., 'rsi_14', 'macd')"),
+    indicator_name: Optional[str] = Query(None, description="Indicator name (e.g., 'rsi_14', 'macd'). If not provided, returns all indicators."),
     start_date: Optional[datetime] = Query(None, description="Start date"),
     end_date: Optional[datetime] = Query(None, description="End date (default: today)"),
     limit: int = Query(100, ge=1, le=1000, description="Max records to return"),
     db: Session = Depends(get_db)
 ):
     """
-    Get historical values for a specific indicator.
+    Get historical values for indicator(s).
 
-    Useful for charting indicator values over time.
+    If indicator_name is provided, returns history for that specific indicator.
+    If not provided, returns history for all indicators.
     """
     signal_engine = SignalEngine(db)
 
     try:
-        history = signal_engine.get_indicator_history(
-            ticker=ticker,
-            indicator_name=indicator_name,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit
-        )
-
-        if not history:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No history found for {ticker}/{indicator_name}"
+        if indicator_name:
+            # Get specific indicator history
+            history = signal_engine.get_indicator_history(
+                ticker=ticker,
+                indicator_name=indicator_name,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit
             )
 
-        return {
-            "ticker": ticker,
-            "indicator_name": indicator_name,
-            "data_points": len(history),
-            "history": history
-        }
+            if not history:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No history found for {ticker}/{indicator_name}"
+                )
+
+            return {
+                "ticker": ticker,
+                "indicator_name": indicator_name,
+                "data_points": len(history),
+                "history": history
+            }
+        else:
+            # Get all indicators history
+            from app.models import TechnicalIndicator
+            from sqlalchemy import desc
+
+            query = db.query(TechnicalIndicator).filter(
+                TechnicalIndicator.ticker == ticker
+            )
+
+            if start_date:
+                query = query.filter(TechnicalIndicator.timestamp >= start_date)
+            if end_date:
+                query = query.filter(TechnicalIndicator.timestamp <= end_date)
+
+            query = query.order_by(desc(TechnicalIndicator.timestamp))
+
+            # Only apply limit if no date filters are specified
+            # When date filters are provided, they already limit the data effectively
+            if not start_date and not end_date:
+                query = query.limit(limit * 20)  # Allow more records for multiple indicators
+
+            results = query.all()
+
+            if not results:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No indicator history found for {ticker}"
+                )
+
+            # Group by indicator name
+            history_by_indicator = {}
+            for record in results:
+                if record.indicator_name not in history_by_indicator:
+                    history_by_indicator[record.indicator_name] = []
+                history_by_indicator[record.indicator_name].append({
+                    "timestamp": record.timestamp,
+                    "value": float(record.value) if record.value else None,
+                    "meta": record.meta
+                })
+
+            return {
+                "ticker": ticker,
+                "indicator_names": list(history_by_indicator.keys()),
+                "data_points": len(results),
+                "history": history_by_indicator
+            }
 
     except HTTPException:
         raise
