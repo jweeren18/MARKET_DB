@@ -56,17 +56,21 @@ streamlit run app.py
 # Dashboard will open at http://localhost:8501
 ```
 
-For detailed setup instructions, see [SETUP.md](SETUP.md) and [PHASE_1E_COMPLETE.md](PHASE_1E_COMPLETE.md).
+For detailed setup instructions, see [SETUP.md](docs/SETUP.md) and [PHASE_1E_COMPLETE.md](docs/PHASE_1E_COMPLETE.md).
 
 ## 📚 Documentation
 
-- **[PHASE_1E_COMPLETE.md](PHASE_1E_COMPLETE.md)** - Streamlit frontend with interactive dashboards (NEW! ✅)
-- **[PHASE_1C_COMPLETE.md](PHASE_1C_COMPLETE.md)** - Signal engine and technical indicators
-- **[PHASE_1B_COMPLETE.md](PHASE_1B_COMPLETE.md)** - Analytics engine and data pipeline
-- **[ANALYTICS_SERVICE.md](ANALYTICS_SERVICE.md)** - Complete analytics service guide
-- **[AIRFLOW_SETUP_GUIDE.md](AIRFLOW_SETUP_GUIDE.md)** - Airflow setup and deployment
-- **[DATA_PIPELINE.md](DATA_PIPELINE.md)** - Data pipeline architecture
-- **[SETUP.md](SETUP.md)** - Initial setup and configuration
+- **[PHASE_1E_COMPLETE.md](docs/PHASE_1E_COMPLETE.md)** - Streamlit frontend with interactive dashboards (NEW! ✅)
+- **[PHASE_1C_COMPLETE.md](docs/PHASE_1C_COMPLETE.md)** - Signal engine and technical indicators
+- **[PHASE_1B_COMPLETE.md](docs/PHASE_1B_COMPLETE.md)** - Analytics engine and data pipeline
+- **[ANALYTICS_SERVICE.md](docs/ANALYTICS_SERVICE.md)** - Complete analytics service guide
+- **[AIRFLOW_SETUP_GUIDE.md](docs/AIRFLOW_SETUP_GUIDE.md)** - Airflow setup and deployment
+- **[DATA_PIPELINE.md](docs/DATA_PIPELINE.md)** - Data pipeline architecture
+- **[SETUP.md](docs/SETUP.md)** - Initial setup and configuration
+- **[SCHWAB_API_SETUP.md](docs/SCHWAB_API_SETUP.md)** - Schwab API configuration
+- **[DEVELOPMENT_WITHOUT_SCHWAB.md](docs/DEVELOPMENT_WITHOUT_SCHWAB.md)** - Development using yfinance
+- **[BULK_IMPORT_GUIDE.md](docs/BULK_IMPORT_GUIDE.md)** - Bulk ticker import guide
+- **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** - Contribution guidelines
 
 ## Current Status
 
@@ -163,7 +167,7 @@ This project uses a two-branch workflow:
 - **`dev`** - Active development (default branch for new work)
 
 👉 **Developers**: Always work on the `dev` branch or create feature branches from `dev`.
-👉 **See [CONTRIBUTING.md](CONTRIBUTING.md)** for detailed git workflow and contribution guidelines.
+👉 **See [CONTRIBUTING.md](docs/CONTRIBUTING.md)** for detailed git workflow and contribution guidelines.
 
 ## Technology Stack
 
@@ -197,7 +201,7 @@ The platform uses a **hybrid architecture**:
   - Alert generation
 - **PostgreSQL + TimescaleDB**: Shared data layer for all components
 
-See [AIRFLOW_SETUP.md](AIRFLOW_SETUP.md) for detailed orchestration setup.
+See [AIRFLOW_SETUP_GUIDE.md](docs/AIRFLOW_SETUP_GUIDE.md) for detailed orchestration setup.
 
 ## Setup Instructions
 
@@ -212,7 +216,7 @@ See [AIRFLOW_SETUP.md](AIRFLOW_SETUP.md) for detailed orchestration setup.
 
 #### Option 1: Docker (Recommended)
 
-**Note:** If you have PostgreSQL installed locally on Windows, it may conflict with Docker on port 5432. See [SETUP.md](SETUP.md) for port conflict resolution.
+**Note:** If you have PostgreSQL installed locally on Windows, it may conflict with Docker on port 5432. See [SETUP.md](docs/SETUP.md) for port conflict resolution.
 
 ```bash
 # Pull and run TimescaleDB container
@@ -308,7 +312,7 @@ uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT,NVDA --days 30
 uv run python backend/jobs/data_ingestion.py --all --days 30
 ```
 
-See [DEVELOPMENT_WITHOUT_SCHWAB.md](DEVELOPMENT_WITHOUT_SCHWAB.md) for details.
+See [DEVELOPMENT_WITHOUT_SCHWAB.md](docs/DEVELOPMENT_WITHOUT_SCHWAB.md) for details.
 
 ### Option 2: Schwab API (Production)
 
@@ -383,7 +387,7 @@ The system runs daily batch jobs orchestrated by Airflow:
 - **Score Opportunities** (5:00 PM): Run 10x scoring algorithm
 - **Generate Alerts** (5:15 PM): Generate dashboard alerts
 
-Jobs run in isolated Kubernetes pods. See [AIRFLOW_SETUP.md](AIRFLOW_SETUP.md) for configuration.
+Jobs run in isolated Kubernetes pods. See [AIRFLOW_SETUP_GUIDE.md](docs/AIRFLOW_SETUP_GUIDE.md) for configuration.
 
 For development, jobs can be run manually:
 ```bash
