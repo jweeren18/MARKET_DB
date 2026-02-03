@@ -66,7 +66,7 @@ calculate_indicators_task = KubernetesPodOperator(
     in_cluster=False,
     config_file='/path/to/kubeconfig',
     dag=dag,
-    resources=k8s.V1ResourceRequirements(
+    container_resources=k8s.V1ResourceRequirements(
         requests={'memory': '1Gi', 'cpu': '500m'},
         limits={'memory': '2Gi', 'cpu': '1000m'}
     ),

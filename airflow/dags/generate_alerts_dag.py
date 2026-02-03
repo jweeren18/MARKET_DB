@@ -66,7 +66,7 @@ generate_alerts_task = KubernetesPodOperator(
     in_cluster=False,
     config_file='/path/to/kubeconfig',
     dag=dag,
-    resources=k8s.V1ResourceRequirements(
+    container_resources=k8s.V1ResourceRequirements(
         requests={'memory': '256Mi', 'cpu': '250m'},
         limits={'memory': '512Mi', 'cpu': '500m'}
     ),

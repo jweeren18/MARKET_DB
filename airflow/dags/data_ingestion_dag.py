@@ -73,7 +73,7 @@ ingest_daily_data_task = KubernetesPodOperator(
     config_file='/path/to/kubeconfig',  # Path to your kubeconfig (local dev)
     # For production, remove config_file and set in_cluster=True
     dag=dag,
-    resources=k8s.V1ResourceRequirements(
+    container_resources=k8s.V1ResourceRequirements(
         requests={'memory': '512Mi', 'cpu': '500m'},
         limits={'memory': '1Gi', 'cpu': '1000m'}
     ),

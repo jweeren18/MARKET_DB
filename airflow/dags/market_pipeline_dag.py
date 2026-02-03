@@ -96,7 +96,7 @@ ingest_task = KubernetesPodOperator(
     task_id="ingest_market_data",
     name="pipeline-ingest-pod",
     arguments=["jobs/data_ingestion.py", "--all", "--days", "1"],
-    resources=MEDIUM,
+    container_resources=MEDIUM,
     **POD_DEFAULTS,
 )
 
@@ -104,7 +104,7 @@ indicators_task = KubernetesPodOperator(
     task_id="calculate_indicators",
     name="pipeline-indicators-pod",
     arguments=["jobs/calculate_indicators.py", "--all"],
-    resources=LARGE,
+    container_resources=LARGE,
     **POD_DEFAULTS,
 )
 
@@ -112,7 +112,7 @@ scoring_task = KubernetesPodOperator(
     task_id="score_opportunities",
     name="pipeline-scoring-pod",
     arguments=["jobs/score_opportunities.py", "--all"],
-    resources=MEDIUM,
+    container_resources=MEDIUM,
     **POD_DEFAULTS,
 )
 
@@ -120,7 +120,7 @@ alerts_task = KubernetesPodOperator(
     task_id="generate_alerts",
     name="pipeline-alerts-pod",
     arguments=["jobs/generate_alerts.py"],
-    resources=SMALL,
+    container_resources=SMALL,
     **POD_DEFAULTS,
 )
 

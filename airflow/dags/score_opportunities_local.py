@@ -107,7 +107,8 @@ def run_opportunity_scoring(**context):
 
         if results["scores"]:
             top_3 = results["scores"][:3]
-            logger.info(f"Top 3 opportunities: {', '.join([f'{s[\"ticker\"]} ({s[\"score\"]:.1f})' for s in top_3])}")
+            top_3_str = ", ".join(f"{s['ticker']} ({s['score']:.1f})" for s in top_3)
+            logger.info(f"Top 3 opportunities: {top_3_str}")
 
         if results['errors']:
             logger.warning(f"Errors encountered: {len(results['errors'])}")
