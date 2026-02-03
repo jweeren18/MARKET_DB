@@ -173,7 +173,7 @@ def start_scheduler():
     scheduler.add_job(
         run_pipeline,
         trigger=CronTrigger(
-            hour=16, minute=0,
+            hour=16, minute=15,
             day_of_week="mon-fri",
             timezone=eastern,
         ),
@@ -185,7 +185,7 @@ def start_scheduler():
     logger.info("PIPELINE SCHEDULER STARTED")
     next_run = scheduler.get_jobs()[0].next_run_time
     logger.info(f"  Next run: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    logger.info("  Schedule: Mon–Fri at 4:00 PM ET")
+    logger.info("  Schedule: Mon–Fri at 4:15 PM ET")
     logger.info("  Press Ctrl+C to stop")
     logger.info("=" * 70)
 
@@ -236,7 +236,7 @@ def main():
         scheduler = BackgroundScheduler()
         scheduler.add_job(
             run_pipeline,
-            trigger=CronTrigger(hour=16, minute=0, day_of_week="mon-fri", timezone=eastern),
+            trigger=CronTrigger(hour=16, minute=15, day_of_week="mon-fri", timezone=eastern),
         )
         scheduler.start()
         next_run = scheduler.get_jobs()[0].next_run_time
