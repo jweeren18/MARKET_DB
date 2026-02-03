@@ -2,7 +2,7 @@
 Market Pipeline DAG (Local Execution)
 
 Single DAG that runs the full daily pipeline in sequence without Kubernetes:
-    1. ingest_market_data      — fetch latest prices via Schwab/yfinance
+    1. ingest_market_data      — fetch latest prices via Schwab
     2. calculate_indicators    — compute technical indicators
     3. score_opportunities     — calculate 10x opportunity scores
     4. generate_alerts         — create alerts from score changes

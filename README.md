@@ -118,7 +118,7 @@ For detailed setup instructions, see [SETUP.md](docs/SETUP.md) and [PHASE_1E_COM
 - ✅ Historical data backfill (2 years, 10,578 records across 21 tickers)
 - ✅ Automated daily data ingestion (Airflow DAG ready)
 - ✅ Comprehensive data quality monitoring
-- ✅ Multi-source data fetching (Schwab + yfinance fallback)
+- ✅ Schwab API as sole data source (fails fast if credentials missing)
 
 ### Analytics Engine (Phase 1B)
 - ✅ Portfolio P&L calculations (realized/unrealized gains)
@@ -137,7 +137,13 @@ For detailed setup instructions, see [SETUP.md](docs/SETUP.md) and [PHASE_1E_COM
 
 **Phase 1 MVP: COMPLETE** ✅
 
-**Next Steps** (Phase 2): Sentiment intelligence, alerts system, and advanced features.
+### Pipeline Automation ✅
+- Single chained pipeline DAG runs all four stages sequentially at 4:15 PM ET Mon-Fri
+- Two DAG variants: `market_pipeline_local` (active, PythonOperator) and `market_pipeline_dag` (K8s, ready when cluster available)
+- Airflow runs in Docker — see [Airflow Local Dev](#airflow-local-dev) below
+- Manual runner available at `backend/jobs/run_pipeline.py` for ad-hoc / test use
+
+**Next: Whole-Market Scaling** — scaling from 30 tickers to ~4,000 via K8s batched parallelism and Airflow dynamic task mapping. See [TODO.md](TODO.md) for details.
 
 ## Features
 
@@ -295,32 +301,17 @@ uv run streamlit run frontend/app.py
 
 Dashboard will be available at http://localhost:8501
 
-## Market Data Setup
+## Market Data Setup (Schwab API)
 
-### Option 1: Development with yfinance (No API Required)
-
-The platform automatically uses **yfinance** when Schwab API credentials are not configured. This allows full development capability without waiting for API access.
-
-```bash
-# Seed sample tickers
-uv run python scripts/seed_data.py
-
-# Fetch market data (30 days)
-uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT,NVDA --days 30
-
-# Or fetch for all seeded tickers
-uv run python backend/jobs/data_ingestion.py --all --days 30
-```
-
-See [DEVELOPMENT_WITHOUT_SCHWAB.md](docs/DEVELOPMENT_WITHOUT_SCHWAB.md) for details.
-
-### Option 2: Schwab API (Production)
+All market data is fetched via the **Schwab Developer API**. The pipeline will not start without valid credentials.
 
 1. Create a Schwab Developer account at https://developer.schwab.com/
 2. Create a new application
 3. Note your API Key and Secret
-4. Set the callback URL to `http://localhost:8000/auth/callback`
-5. Add credentials to your `.env` file
+4. Set the callback URL to `https://127.0.0.1:8000/auth/callback`
+5. Add credentials to your `.env` file (`SCHWAB_API_KEY`, `SCHWAB_API_SECRET`)
+
+See [SCHWAB_API_SETUP.md](docs/SCHWAB_API_SETUP.md) for SSL certificate setup and OAuth flow details.
 
 ## Project Structure
 
@@ -334,18 +325,24 @@ market-db/
 │   │   ├── services/     # Business logic
 │   │   ├── tasks/        # Background jobs (unused - see jobs/)
 │   │   └── utils/        # Helper functions
-│   ├── jobs/             # Airflow job scripts
+│   ├── jobs/             # Pipeline stage scripts (each is a standalone entry point)
 │   │   ├── data_ingestion.py
 │   │   ├── calculate_indicators.py
 │   │   ├── score_opportunities.py
-│   │   └── generate_alerts.py
+│   │   ├── generate_alerts.py
+│   │   └── run_pipeline.py       # Manual runner — chains all 4 stages sequentially
 │   └── tests/
 ├── frontend/
-│   ├── app.py            # Streamlit main app (to be implemented)
+│   ├── app.py            # Streamlit main app
 │   ├── pages/            # Streamlit pages
 │   └── components/       # Reusable Streamlit components
 ├── airflow/
-│   └── dags/             # Airflow DAG definitions
+│   ├── docker-compose.yaml       # Airflow local dev (webserver + scheduler + postgres)
+│   └── dags/                     # DAG definitions
+│       ├── market_pipeline_dag.py        # K8s production pipeline (4 stages chained)
+│       ├── market_pipeline_local.py      # Local pipeline (active — PythonOperator)
+│       ├── data_backfill_dag.py          # Manual historical backfill (K8s)
+│       └── ...                           # Standalone K8s DAGs (paused)
 ├── kubernetes/
 │   └── jobs/             # Kubernetes job manifests
 ├── scripts/
@@ -379,26 +376,46 @@ alembic revision --autogenerate -m "description"
 alembic upgrade head
 ```
 
-### Daily Batch Jobs (Airflow + Kubernetes)
+### Daily Batch Pipeline
 
-The system runs daily batch jobs orchestrated by Airflow:
-- **Data Ingestion** (4:00 PM): Fetch market data from Schwab/yfinance
-- **Calculate Indicators** (4:30 PM): Calculate technical indicators
-- **Score Opportunities** (5:00 PM): Run 10x scoring algorithm
-- **Generate Alerts** (5:15 PM): Generate dashboard alerts
+All four stages run as a single chained DAG at **4:15 PM ET Mon-Fri**:
 
-Jobs run in isolated Kubernetes pods. See [AIRFLOW_SETUP_GUIDE.md](docs/AIRFLOW_SETUP_GUIDE.md) for configuration.
+| # | Stage | Job script | What it does |
+|---|-------|-----------|--------------|
+| 1 | Ingest | `data_ingestion.py` | Fetch latest prices via Schwab API |
+| 2 | Indicators | `calculate_indicators.py` | Compute 20+ technical indicators |
+| 3 | Scoring | `score_opportunities.py` | Calculate 10x opportunity scores |
+| 4 | Alerts | `generate_alerts.py` | Generate dashboard alerts from score changes |
 
-For development, jobs can be run manually:
+#### Airflow Local Dev
+
+Airflow runs in Docker — no host install needed.
+
 ```bash
-# Run data ingestion
+cd airflow
+docker compose up -d          # starts webserver + scheduler + postgres
+
+# UI → http://localhost:8080  (user: airflow / pass: airflow)
+# Logs
+docker compose logs -f airflow-scheduler
+# Stop
+docker compose down
+```
+
+Only `market_pipeline_local` should be enabled; all other DAGs stay paused.
+`data_backfill_historical` can be manually triggered from the UI when a large backfill is needed.
+
+#### Running jobs manually (ad-hoc / testing)
+
+```bash
+# Full pipeline in one shot
+uv run python backend/jobs/run_pipeline.py
+
+# Individual stages
 uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT --days 30
-
-# Run indicator calculation (coming in Phase 1D)
-uv run python backend/jobs/calculate_indicators.py
-
-# Run opportunity scoring (coming in Phase 1E)
-uv run python backend/jobs/score_opportunities.py
+uv run python backend/jobs/calculate_indicators.py --all
+uv run python backend/jobs/score_opportunities.py --all
+uv run python backend/jobs/generate_alerts.py
 ```
 
 ## API Endpoints
@@ -431,7 +448,7 @@ Key environment variables (see [.env.example](.env.example)):
 DATABASE_URL=postgresql://postgres:password@127.0.0.1:5433/market_intelligence
 TIMESCALEDB_ENABLED=true
 
-# Optional - falls back to yfinance for development
+# Required — pipeline will not start without these
 SCHWAB_API_KEY=your_api_key_here
 SCHWAB_API_SECRET=your_api_secret_here
 
@@ -457,11 +474,10 @@ SCORING_SCHEDULE=0 17 * * *
 - Airflow + Kubernetes integration
 
 ### Phase 1B: Market Data Ingestion ✅
-- Market data service with provider abstraction (Schwab/yfinance)
+- Schwab API market data service
 - Daily price data ingestion job
-- Sample data seeding (21 tickers)
+- Sample data seeding
 - Database initialization scripts
-- Development workflow without Schwab API
 
 ### Phase 1C: Portfolio Analytics (Next)
 - Portfolio P&L calculations
@@ -500,7 +516,13 @@ SCORING_SCHEDULE=0 17 * * *
 - Performance optimization
 - Production deployment preparation
 
-### Phase 2: Sentiment Intelligence (Future)
+### Phase 2: Whole-Market Scaling (Next)
+- Batch flags on all job scripts (`--batch-start` / `--batch-size`)
+- Airflow dynamic task mapping (fan-out/fan-in per pipeline stage)
+- K8s pod-per-batch execution
+- Scale from 30 tickers → ~4,000 (full US equity universe)
+
+### Phase 3: Sentiment Intelligence (Future)
 - Data collection
 - NLP processing
 - Integration

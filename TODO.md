@@ -66,47 +66,81 @@ Thoroughly explore the Charles Schwab Developer API to understand the full exten
 
 ---
 
-## Current Phase: Phase 1E - Frontend & Dashboard
+## Current Phase: Whole-Market Scaling
 
 ### ✅ Completed
 - [x] Bulk ticker import system
-- [x] Import 20 sample tickers with metadata
-- [x] Backfill 2 years historical data (4,518 price records)
+- [x] Import 30 sample tickers with metadata
+- [x] Backfill 2 years historical data
 - [x] Streamlit frontend with Opportunity Radar, Portfolio Overview, Ticker Deep Dive
 - [x] API endpoints for tickers, prices, indicators, opportunities
+- [x] Calculate technical indicators for all tickers
+- [x] Score 10x opportunities for all tickers
+- [x] Alerts generation job
+- [x] Pipeline orchestrator (`backend/jobs/run_pipeline.py`) — manual runner for testing/ad-hoc use
+- [x] Chained Airflow pipeline DAGs:
+  - `market_pipeline_dag.py` — K8s production DAG (4 KubernetesPodOperator tasks, fan-out ready)
+  - `market_pipeline_local.py` — local PythonOperator DAG (active, runs via Docker Compose Airflow)
+- [x] Airflow local dev environment via Docker Compose (`airflow/docker-compose.yaml`)
+  - All 9 DAGs parse cleanly; only `market_pipeline_local` is enabled
+- [x] Fixed all DAG import errors (container_resources param, f-string backslash)
 
-### ⏳ In Progress
-- [ ] Calculate technical indicators for all 20 tickers (currently running)
-- [ ] Score 10x opportunities for all tickers
-- [ ] Verify dashboard displays all data correctly
+### ⏳ In Progress — Whole-Market Scaling (~4,000 tickers)
+- [ ] Add `--batch` / `--batch-size` flags to all 4 job scripts so each can process a slice of tickers
+- [ ] Rewrite `market_pipeline_dag.py` to use Airflow dynamic task mapping (fan-out per stage)
+- [ ] Validate K8s pod execution end-to-end with batched workloads
+- [ ] Stress-test indicator calculation and scoring at 4,000-ticker scale
+- [ ] Update resource presets (SMALL/MEDIUM/LARGE) based on actual batch benchmarks
 
-### 📋 Next Steps
-1. Wait for indicator calculation to complete
-2. Run opportunity scoring: `python backend/jobs/score_opportunities.py --all`
-3. Test dashboard with all 20 tickers
-4. Document Phase 1E completion
+### 📋 Next Steps (after scaling)
+1. Integrate Schwab streaming quotes for real-time price updates
+2. Sentiment intelligence (Phase 3 — see below)
+3. Explore Schwab API capabilities (see section below)
 
 ---
 
-## Phase 2 Ideas (Future)
+## Phase 2: Whole-Market Scaling (Current)
 
-### Sentiment Intelligence
+Goal: move from 30 tickers to the full US equity universe (~4,000 tickers) without blowing up wall-clock time.
+
+### Architecture change
+- Each pipeline stage fans out across N Kubernetes pods, each processing a batch of tickers in parallel.
+- Airflow dynamic task mapping (`@task` + `.expand()`) generates one task instance per batch at DAG-run time.
+- Fan-in (implicit) waits for all batch tasks to finish before the next stage starts.
+- `run_pipeline.py` stays as a manual/testing runner; it does NOT need batch support (just loops sequentially).
+
+### Deliverables
+1. **Batch flags on jobs** — `--batch-start` / `--batch-size` (or ticker-list file) on:
+   - `data_ingestion.py`
+   - `calculate_indicators.py`
+   - `score_opportunities.py`
+   - `generate_alerts.py`
+2. **Dynamic task mapping DAG** (`market_pipeline_dag.py`) — replaces the current linear 4-task chain with staged fan-out/fan-in
+3. **K8s validation** — deploy batched DAG to a real cluster, verify pods, logs, and DB writes
+
+### Constraints to watch
+- yfinance rate limits at volume — may need to throttle batch sizes or stagger start times
+- TimescaleDB insert throughput for concurrent batch writes — benchmark before tuning chunk sizes
+- Schwab API rate limits (if enabled in prod) — batch sizes must stay within quota
+
+---
+
+## Phase 3: Sentiment Intelligence (Future)
+
 - Reddit API integration (r/wallstreetbets, r/stocks)
 - Twitter/X API for ticker mentions
 - News sentiment analysis
 - Social media volume tracking
 
-### Advanced Features
+## Phase 3+: Advanced Features (Future)
+
 - Custom scoring algorithm builder
 - Backtesting framework
 - Portfolio optimization recommendations
 - Tax-loss harvesting suggestions
 - Email/SMS/push notifications
 - Multi-user support
-
-### Mobile
 - Progressive Web App (PWA)
-- React Native mobile app
 
 ---
 
@@ -127,11 +161,13 @@ Thoroughly explore the Charles Schwab Developer API to understand the full exten
 
 ## Notes
 
-- Database currently has 20 tickers with 2 years of price data
-- System is fully dynamic and can scale to hundreds/thousands of tickers
-- All tickers process through batch jobs (indicators, scoring)
-- Frontend automatically displays all tickers via API
+- Database currently has 30 tickers with 2 years of price data
+- Pipeline runs as a single chained DAG (`market_pipeline_local`) at 4:15 PM ET Mon-Fri via Airflow in Docker
+- Airflow UI: `http://localhost:8080` (user: `airflow` / pass: `airflow`) — start with `cd airflow && docker compose up -d`
+- `run_pipeline.py` is manual-only; use it for one-off runs or testing, not scheduling
+- K8s pipeline DAG (`market_pipeline_dag.py`) is scaffolded and ready; activate when a K8s cluster is available
+- Scaling to ~4,000 tickers requires batch flags + dynamic task mapping (see Phase 2 above)
 
 ---
 
-**Last Updated**: 2026-01-29
+**Last Updated**: 2026-02-03

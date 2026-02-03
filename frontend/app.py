@@ -234,11 +234,7 @@ def show_settings():
     api_url = st.text_input("Backend API URL:", value=get_api_url())
 
     st.markdown("### Data Provider")
-    provider = st.selectbox(
-        "Market Data Provider:",
-        ["Auto (yfinance in dev, Schwab in prod)", "Schwab API", "yfinance"],
-        help="Select your preferred market data provider"
-    )
+    st.info("Market data is fetched exclusively via the Schwab API.")
 
     st.markdown("### Preferences")
     st.checkbox("Show portfolio allocation chart", value=True)

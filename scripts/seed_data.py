@@ -2,29 +2,22 @@
 """
 Seed Database with Sample Data
 
-This script populates the database with:
-- Sample tickers (stocks and ETFs)
-- Basic ticker information
-- Optional: Historical price data using yfinance
-
-Run this to test the platform without Schwab API credentials.
+Populates the database with sample tickers (stocks and ETFs).
+Metadata is hardcoded here; for a larger import with live metadata
+use scripts/bulk_import_tickers.py instead.
 
 Usage:
-    python scripts/seed_data.py [--fetch-prices]
+    python scripts/seed_data.py
 """
 
 import sys
 import os
-import asyncio
-import argparse
-from datetime import datetime
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 from app.database import SessionLocal
 from app.models import Ticker
-from app.services.market_data_service import market_data_service
 
 
 # Sample tickers across different sectors
@@ -64,39 +57,7 @@ SAMPLE_TICKERS = [
 ]
 
 
-async def fetch_and_update_ticker_info(db, ticker_symbol: str):
-    """Fetch real ticker info from yfinance and update database."""
-    try:
-        fundamentals = await market_data_service.get_fundamentals(ticker_symbol)
-
-        ticker = db.query(Ticker).filter(Ticker.ticker == ticker_symbol).first()
-        if ticker:
-            # Update with real data from yfinance
-            ticker.name = fundamentals.get('name', ticker.name)
-            ticker.sector = fundamentals.get('sector', ticker.sector)
-            ticker.industry = fundamentals.get('industry', ticker.industry)
-
-            # Determine market cap category
-            market_cap = fundamentals.get('marketCap', 0)
-            if market_cap > 200_000_000_000:
-                ticker.market_cap_category = 'LARGE'
-            elif market_cap > 10_000_000_000:
-                ticker.market_cap_category = 'MID'
-            elif market_cap > 2_000_000_000:
-                ticker.market_cap_category = 'SMALL'
-            else:
-                ticker.market_cap_category = 'MICRO'
-
-            db.commit()
-            print(f"[OK] Updated {ticker_symbol} with real data")
-        else:
-            print(f"[SKIP] Ticker {ticker_symbol} not found in database")
-
-    except Exception as e:
-        print(f"[ERROR] Failed to fetch data for {ticker_symbol}: {e}")
-
-
-def seed_tickers(db, fetch_real_data: bool = False):
+def seed_tickers(db):
     """Seed the database with sample tickers."""
     print(f"\n[SEED] Seeding {len(SAMPLE_TICKERS)} tickers...")
 
@@ -121,24 +82,9 @@ def seed_tickers(db, fetch_real_data: bool = False):
 
     print(f"[SUCCESS] Added {added} new tickers, updated {updated} existing tickers")
 
-    # Optionally fetch real data from yfinance
-    if fetch_real_data:
-        print("\n[FETCH] Fetching real data from yfinance...")
-        for ticker_data in SAMPLE_TICKERS:
-            asyncio.run(fetch_and_update_ticker_info(db, ticker_data['ticker']))
-
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description='Seed database with sample data')
-    parser.add_argument(
-        '--fetch-prices',
-        action='store_true',
-        help='Fetch real data from yfinance (slower but more accurate)'
-    )
-
-    args = parser.parse_args()
-
     print("Market Intelligence Database Seeding")
     print("=" * 50)
 
@@ -146,8 +92,7 @@ def main():
     db = SessionLocal()
 
     try:
-        # Seed tickers
-        seed_tickers(db, fetch_real_data=args.fetch_prices)
+        seed_tickers(db)
 
         print("\n[COMPLETE] Database seeding complete!")
         print(f"\nYou can now:")
