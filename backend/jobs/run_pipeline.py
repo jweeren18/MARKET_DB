@@ -8,16 +8,18 @@ Runs the full daily data pipeline in sequence:
     3. Scoring          — calculate 10x opportunity scores
     4. Alerts           — generate alerts from score changes
 
-Can run immediately or on a schedule (weekdays at 4 PM ET).
+Manual trigger for testing and ad-hoc runs.
+Scheduled execution is handled by the Airflow DAGs:
+    - airflow/dags/market_pipeline_dag.py        (Kubernetes / production)
+    - airflow/dags/market_pipeline_local.py      (local Airflow)
 
 Usage:
-    python backend/jobs/run_pipeline.py              # start scheduler (runs at 4 PM ET Mon-Fri)
-    python backend/jobs/run_pipeline.py --run-now    # run pipeline once immediately
-    python backend/jobs/run_pipeline.py --schedule-only  # print next scheduled run and exit
+    python backend/jobs/run_pipeline.py                        # run full pipeline
+    python backend/jobs/run_pipeline.py --ingest-days 5        # backfill 5 days of prices
+    python backend/jobs/run_pipeline.py --lookback 30 --force  # recalculate with 30-day window
 """
 
 import sys
-import os
 import asyncio
 import argparse
 import logging
@@ -158,59 +160,12 @@ def run_pipeline(ingest_days: int = 1, indicator_lookback: int = 252, force: boo
 
 
 # ---------------------------------------------------------------------------
-# Scheduler
-# ---------------------------------------------------------------------------
-
-def start_scheduler():
-    """Start APScheduler to run the pipeline daily at 4 PM ET (Mon–Fri)."""
-    from apscheduler.schedulers.blocking import BlockingScheduler
-    from apscheduler.triggers.cron import CronTrigger
-    import pytz
-
-    eastern = pytz.timezone("US/Eastern")
-
-    scheduler = BlockingScheduler()
-    scheduler.add_job(
-        run_pipeline,
-        trigger=CronTrigger(
-            hour=16, minute=15,
-            day_of_week="mon-fri",
-            timezone=eastern,
-        ),
-        name="market_pipeline",
-        misfire_grace_time=3600,  # tolerate up to 1 hour late start
-    )
-
-    logger.info("=" * 70)
-    logger.info("PIPELINE SCHEDULER STARTED")
-    next_run = scheduler.get_jobs()[0].next_run_time
-    logger.info(f"  Next run: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    logger.info("  Schedule: Mon–Fri at 4:15 PM ET")
-    logger.info("  Press Ctrl+C to stop")
-    logger.info("=" * 70)
-
-    try:
-        scheduler.start()
-    except KeyboardInterrupt:
-        logger.info("Scheduler stopped by user")
-        scheduler.shutdown()
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Market data pipeline orchestrator"
-    )
-    parser.add_argument(
-        "--run-now", action="store_true",
-        help="Run the pipeline immediately instead of scheduling",
-    )
-    parser.add_argument(
-        "--schedule-only", action="store_true",
-        help="Print the next scheduled run time and exit",
+        description="Manual pipeline runner (scheduled runs use Airflow DAGs)"
     )
     parser.add_argument(
         "--ingest-days", type=int, default=1,
@@ -227,31 +182,11 @@ def main():
 
     args = parser.parse_args()
 
-    if args.schedule_only:
-        from apscheduler.schedulers.background import BackgroundScheduler
-        from apscheduler.triggers.cron import CronTrigger
-        import pytz
-
-        eastern = pytz.timezone("US/Eastern")
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(
-            run_pipeline,
-            trigger=CronTrigger(hour=16, minute=15, day_of_week="mon-fri", timezone=eastern),
-        )
-        scheduler.start()
-        next_run = scheduler.get_jobs()[0].next_run_time
-        print(f"Next scheduled run: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        scheduler.shutdown()
-        return
-
-    if args.run_now:
-        run_pipeline(
-            ingest_days=args.ingest_days,
-            indicator_lookback=args.lookback,
-            force=args.force,
-        )
-    else:
-        start_scheduler()
+    run_pipeline(
+        ingest_days=args.ingest_days,
+        indicator_lookback=args.lookback,
+        force=args.force,
+    )
 
 
 if __name__ == "__main__":
