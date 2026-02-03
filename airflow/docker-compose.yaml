@@ -5,8 +5,6 @@
 # Logs:    docker compose logs -f airflow-scheduler
 # Stop:    docker compose down
 
-version: '3.8'
-
 x-airflow-common:
   &airflow-common
   image: apache/airflow:2.8.1-python3.10
@@ -19,8 +17,22 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # Install kubernetes provider so the K8s pipeline DAG parses without error
-    _AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS: 'apache-airflow-providers-cncf-kubernetes>=8.0.0'
+    # K8s provider (so the production DAG parses) + backend job deps (so local
+    # DAG task callables can import app.* and jobs.* at runtime).
+    _AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS: >-
+      apache-airflow-providers-cncf-kubernetes>=8.0.0
+      sqlalchemy>=2.0.25
+      psycopg2-binary>=2.9.9
+      pydantic>=2.6.0
+      pydantic-settings>=2.1.0
+      python-dotenv>=1.0.1
+      httpx>=0.26.0
+      pandas>=2.2.0
+      numpy>=1.26.0
+      ta>=0.11.0
+    # Backend is volume-mounted at /opt/airflow/backend — put it on PYTHONPATH so
+    # "from app.*" and "from jobs.*" imports resolve in all Airflow processes.
+    PYTHONPATH: /opt/airflow/backend
     # App database — uncomment when you want local DAGs to actually execute tasks.
     # Use host.docker.internal (Docker Desktop) or 172.17.0.1 (Linux) to reach
     # the market_intelligence DB running on the host.
@@ -54,7 +66,7 @@ services:
       start_period: 5s
     restart: always
     ports:
-      - "5433:5432"  # Different port to avoid conflict with main DB
+      - "5434:5432"  # Different port to avoid conflict with main DB (5432) and TimescaleDB (5433)
 
   airflow-webserver:
     <<: *airflow-common
