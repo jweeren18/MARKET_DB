@@ -1,11 +1,15 @@
 # Docker Compose for Airflow local development
-# Based on official Airflow docker-compose with customizations
+#
+# Start:   cd airflow && docker compose up -d
+# UI:      http://localhost:8080  (user: airflow / pass: airflow)
+# Logs:    docker compose logs -f airflow-scheduler
+# Stop:    docker compose down
 
 version: '3.8'
 
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.8.0-python3.10
+  image: apache/airflow:2.8.1-python3.10
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -15,17 +19,19 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # Kubernetes config for local development
-    AIRFLOW__KUBERNETES__KUBE_CLIENT_REQUEST_ARGS: '{"_request_timeout": 60}'
-    AIRFLOW__KUBERNETES__DELETE_WORKER_PODS: 'True'
-    AIRFLOW__KUBERNETES__WORKER_PODS_CREATION_BATCH_SIZE: '10'
+    # Install kubernetes provider so the K8s pipeline DAG parses without error
+    _AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS: 'apache-airflow-providers-cncf-kubernetes>=8.0.0'
+    # App database — uncomment when you want local DAGs to actually execute tasks.
+    # Use host.docker.internal (Docker Desktop) or 172.17.0.1 (Linux) to reach
+    # the market_intelligence DB running on the host.
+    # DATABASE_URL: postgresql://postgres:password@host.docker.internal:5432/market_intelligence
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./config:/opt/airflow/config
-    # Mount kubeconfig for local K8s access
-    - ~/.kube/config:/opt/airflow/kubeconfig
+    # Mount backend/ so local DAGs can resolve app.* and jobs.* imports at runtime
+    - ../backend:/opt/airflow/backend
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -88,8 +94,8 @@ services:
     command:
       - -c
       - |
-        mkdir -p /sources/logs /sources/dags /sources/plugins
-        chown -R "${AIRFLOW_UID:-50000}:0" /sources/{logs,dags,plugins}
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins}
         exec /entrypoint airflow version
     environment:
       <<: *airflow-common-env
@@ -98,8 +104,6 @@ services:
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
     user: "0:0"
-    volumes:
-      - ./:/sources
 
   airflow-cli:
     <<: *airflow-common
