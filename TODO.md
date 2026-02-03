@@ -86,8 +86,8 @@ Thoroughly explore the Charles Schwab Developer API to understand the full exten
 - [x] Fixed all DAG import errors (container_resources param, f-string backslash)
 
 ### ⏳ In Progress — Whole-Market Scaling (~4,000 tickers)
-- [ ] Add `--batch` / `--batch-size` flags to all 4 job scripts so each can process a slice of tickers
-- [ ] Rewrite `market_pipeline_dag.py` to use Airflow dynamic task mapping (fan-out per stage)
+- [x] Add `--batch-start` / `--batch-size` flags to indicator and scoring jobs (ingest stays single-pod; alerts is lightweight)
+- [x] Rewrite `market_pipeline_dag.py` to use Airflow dynamic task mapping (fan-out per stage)
 - [ ] Validate K8s pod execution end-to-end with batched workloads
 - [ ] Stress-test indicator calculation and scoring at 4,000-ticker scale
 - [ ] Update resource presets (SMALL/MEDIUM/LARGE) based on actual batch benchmarks
