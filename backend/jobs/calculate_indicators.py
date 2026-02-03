@@ -9,6 +9,7 @@ Usage:
     python backend/jobs/calculate_indicators.py --ticker AAPL
     python backend/jobs/calculate_indicators.py --all --lookback 365
     python backend/jobs/calculate_indicators.py --all --force
+    python backend/jobs/calculate_indicators.py --all --batch-start 0 --batch-size 500
 """
 
 import sys
@@ -24,6 +25,7 @@ import logging
 from datetime import datetime
 
 from app.database import SessionLocal
+from app.models import Ticker
 from app.services.signal_engine import SignalEngine
 
 
@@ -129,6 +131,16 @@ def calculate_indicators_for_all_tickers(
         db.close()
 
 
+def get_active_tickers():
+    """Get alphabetically-sorted list of all active tickers."""
+    db = SessionLocal()
+    try:
+        tickers = db.query(Ticker).filter(Ticker.is_active == True).all()
+        return sorted([t.ticker for t in tickers])
+    finally:
+        db.close()
+
+
 def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(
@@ -155,6 +167,18 @@ def main():
         action="store_true",
         help="Force recalculation even if indicators exist for today"
     )
+    parser.add_argument(
+        "--batch-start",
+        type=int,
+        default=None,
+        help="Start index into sorted active-ticker list (for K8s fan-out)"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Number of tickers to process from batch-start (for K8s fan-out)"
+    )
 
     args = parser.parse_args()
 
@@ -166,11 +190,19 @@ def main():
             force=args.force
         )
     elif args.all:
-        # Calculate for all tickers
-        calculate_indicators_for_all_tickers(
-            lookback_days=args.lookback,
-            force=args.force
-        )
+        if args.batch_start is not None and args.batch_size is not None:
+            # Batched mode — process a slice of the ticker list (K8s fan-out)
+            all_tickers = get_active_tickers()
+            batch = all_tickers[args.batch_start:args.batch_start + args.batch_size]
+            logger.info(f"Batch [{args.batch_start}:{args.batch_start + args.batch_size}] — {len(batch)} tickers")
+            for ticker in batch:
+                calculate_indicators_for_ticker(ticker=ticker, lookback_days=args.lookback, force=args.force)
+        else:
+            # Full run — all tickers sequentially
+            calculate_indicators_for_all_tickers(
+                lookback_days=args.lookback,
+                force=args.force
+            )
     else:
         logger.error("Must specify either --ticker or --all")
         parser.print_help()

@@ -45,11 +45,11 @@ Thoroughly explore the Charles Schwab Developer API to understand the full exten
    - Tax lot information
 
 **Action Items:**
-- [ ] Review official Schwab API documentation thoroughly
+- [x] Review official Schwab API documentation thoroughly
 - [ ] Test all available endpoints with authenticated calls
-- [ ] Document capabilities in a dedicated markdown file
-- [ ] Identify features that could enhance our platform
-- [ ] Assess rate limits and data restrictions
+- [x] Document capabilities in a dedicated markdown file (`docs/SCHWAB_API_REFERENCE.md`)
+- [x] Identify features that could enhance our platform (bulk quotes, fundamentals via quotes, movers)
+- [x] Assess rate limits and data restrictions (120 calls/min market data — see reference doc)
 - [ ] Compare with other broker APIs (Interactive Brokers, Alpaca, etc.)
 
 **Resources:**
@@ -119,9 +119,12 @@ Goal: move from 30 tickers to the full US equity universe (~4,000 tickers) witho
 3. **K8s validation** — deploy batched DAG to a real cluster, verify pods, logs, and DB writes
 
 ### Constraints to watch
-- yfinance rate limits at volume — may need to throttle batch sizes or stagger start times
-- TimescaleDB insert throughput for concurrent batch writes — benchmark before tuning chunk sizes
-- Schwab API rate limits (if enabled in prod) — batch sizes must stay within quota
+- **Schwab rate limit: 120 market-data calls/min per API key.** This is a hard ceiling shared across all pods.
+  - Price history is single-symbol only → 4,000 calls for full market → ~34 min sequentially.
+  - Fanning out ingest across pods doesn't help — they'd just split the same 120/min quota and 429 each other.
+  - Solution: run ingest as a single pod with a client-side rate limiter (0.5s sleep between calls).
+- **Stages 2–4 are CPU bound (no Schwab calls).** These are the stages that benefit from K8s fan-out.
+- TimescaleDB insert throughput for concurrent batch writes — benchmark before tuning chunk sizes.
 
 ---
 

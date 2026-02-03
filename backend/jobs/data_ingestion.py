@@ -117,6 +117,9 @@ class DataIngestionJob:
             try:
                 candles = await self.fetch_price_history(symbol, days)
                 self.save_price_data(symbol, candles)
+                # Schwab rate limit: 120 market-data calls/min.
+                # Sleep 0.5s between calls to stay safely under the cap.
+                await asyncio.sleep(0.5)
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
                 continue

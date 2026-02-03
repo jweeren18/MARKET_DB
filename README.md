@@ -416,6 +416,10 @@ uv run python backend/jobs/data_ingestion.py --tickers AAPL,MSFT --days 30
 uv run python backend/jobs/calculate_indicators.py --all
 uv run python backend/jobs/score_opportunities.py --all
 uv run python backend/jobs/generate_alerts.py
+
+# Batched stages (for K8s fan-out — slice the sorted active-ticker list)
+uv run python backend/jobs/calculate_indicators.py --all --batch-start 0 --batch-size 500
+uv run python backend/jobs/score_opportunities.py --all --batch-start 500 --batch-size 500
 ```
 
 ## API Endpoints

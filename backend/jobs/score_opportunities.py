@@ -8,6 +8,7 @@ Usage:
     python backend/jobs/score_opportunities.py --all
     python backend/jobs/score_opportunities.py --ticker AAPL
     python backend/jobs/score_opportunities.py --all --min-confidence 60
+    python backend/jobs/score_opportunities.py --all --batch-start 0 --batch-size 500
 """
 
 import sys
@@ -24,7 +25,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.database import SessionLocal
-from app.models import OpportunityScore
+from app.models import OpportunityScore, Ticker
 from app.services.opportunity_scorer import OpportunityScorer
 
 
@@ -227,6 +228,16 @@ def score_all_tickers(
         db.close()
 
 
+def get_active_tickers():
+    """Get alphabetically-sorted list of all active tickers."""
+    db = SessionLocal()
+    try:
+        tickers = db.query(Ticker).filter(Ticker.is_active == True).all()
+        return sorted([t.ticker for t in tickers])
+    finally:
+        db.close()
+
+
 def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(
@@ -254,6 +265,18 @@ def main():
         default=0.0,
         help="Minimum confidence level to include (default: 0)"
     )
+    parser.add_argument(
+        "--batch-start",
+        type=int,
+        default=None,
+        help="Start index into sorted active-ticker list (for K8s fan-out)"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Number of tickers to process from batch-start (for K8s fan-out)"
+    )
 
     args = parser.parse_args()
 
@@ -264,11 +287,19 @@ def main():
             benchmark=args.benchmark
         )
     elif args.all:
-        # Score all tickers
-        score_all_tickers(
-            min_confidence=args.min_confidence,
-            benchmark=args.benchmark
-        )
+        if args.batch_start is not None and args.batch_size is not None:
+            # Batched mode — score a slice of the ticker list (K8s fan-out)
+            all_tickers = get_active_tickers()
+            batch = all_tickers[args.batch_start:args.batch_start + args.batch_size]
+            logger.info(f"Batch [{args.batch_start}:{args.batch_start + args.batch_size}] — {len(batch)} tickers")
+            for ticker in batch:
+                score_and_store_ticker(ticker=ticker, benchmark=args.benchmark)
+        else:
+            # Full run — all tickers sequentially
+            score_all_tickers(
+                min_confidence=args.min_confidence,
+                benchmark=args.benchmark
+            )
     else:
         logger.error("Must specify either --ticker or --all")
         parser.print_help()
