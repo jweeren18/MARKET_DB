@@ -33,10 +33,14 @@ x-airflow-common:
     # Backend is volume-mounted at /opt/airflow/backend — put it on PYTHONPATH so
     # "from app.*" and "from jobs.*" imports resolve in all Airflow processes.
     PYTHONPATH: /opt/airflow/backend
-    # App database — uncomment when you want local DAGs to actually execute tasks.
-    # Use host.docker.internal (Docker Desktop) or 172.17.0.1 (Linux) to reach
-    # the market_intelligence DB running on the host.
-    # DATABASE_URL: postgresql://postgres:password@host.docker.internal:5432/market_intelligence
+    # App database — points at the host's TimescaleDB (port 5433).
+    # host.docker.internal resolves to the Docker Desktop host (Windows/Mac).
+    DATABASE_URL: postgresql://postgres:password@host.docker.internal:5433/market_intelligence
+  # Pull SCHWAB_API_KEY / SCHWAB_API_SECRET (and other app vars) from the
+  # project-root .env.  Explicit environment: entries above take precedence,
+  # so DATABASE_URL correctly uses host.docker.internal instead of 127.0.0.1.
+  env_file:
+    - ../.env
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
