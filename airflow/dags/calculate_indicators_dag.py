@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from airflow.sensors.external_task import ExternalTaskSensor
-from airflow.utils.dates import days_ago
 from kubernetes.client import models as k8s
 
 # Default arguments
@@ -27,8 +26,8 @@ dag = DAG(
     'calculate_indicators',
     default_args=default_args,
     description='Calculate technical indicators for all tickers',
-    schedule_interval='30 16 * * 1-5',  # 4:30 PM Mon-Fri
-    start_date=days_ago(1),
+    schedule='30 16 * * 1-5',  # 4:30 PM Mon-Fri
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['market-data', 'indicators'],
 )
@@ -39,38 +38,38 @@ env_vars = {
     'PYTHONUNBUFFERED': '1',
 }
 
-# Wait for data ingestion to complete
-wait_for_ingestion = ExternalTaskSensor(
-    task_id='wait_for_data_ingestion',
-    external_dag_id='data_ingestion',
-    external_task_id='ingest_market_data',
-    allowed_states=['success'],
-    failed_states=['failed', 'skipped'],
-    mode='reschedule',
-    timeout=3600,  # 1 hour timeout
-    poke_interval=60,  # Check every minute
-    dag=dag,
-)
+with dag:
 
-# Calculate indicators task
-calculate_indicators_task = KubernetesPodOperator(
-    task_id='calculate_technical_indicators',
-    name='calculate-indicators-pod',
-    namespace='default',
-    image='market-intelligence-jobs:latest',
-    cmds=['python'],
-    arguments=['jobs/calculate_indicators.py', '--all'],
-    env_vars=env_vars,
-    get_logs=True,
-    is_delete_operator_pod=True,
-    in_cluster=False,
-    config_file='/path/to/kubeconfig',
-    dag=dag,
-    container_resources=k8s.V1ResourceRequirements(
-        requests={'memory': '1Gi', 'cpu': '500m'},
-        limits={'memory': '2Gi', 'cpu': '1000m'}
-    ),
-)
+    # Wait for data ingestion to complete
+    wait_for_ingestion = ExternalTaskSensor(
+        task_id='wait_for_data_ingestion',
+        external_dag_id='data_ingestion',
+        external_task_id='ingest_market_data',
+        allowed_states=['success'],
+        failed_states=['failed', 'skipped'],
+        mode='reschedule',
+        timeout=3600,  # 1 hour timeout
+        poke_interval=60,  # Check every minute
+    )
 
-# Task dependencies
-wait_for_ingestion >> calculate_indicators_task
+    # Calculate indicators task
+    calculate_indicators_task = KubernetesPodOperator(
+        task_id='calculate_technical_indicators',
+        name='calculate-indicators-pod',
+        namespace='default',
+        image='market-intelligence-jobs:latest',
+        cmds=['python'],
+        arguments=['jobs/calculate_indicators.py', '--all'],
+        env_vars=env_vars,
+        get_logs=True,
+        is_delete_operator_pod=True,
+        in_cluster=False,
+        config_file='/path/to/kubeconfig',
+        container_resources=k8s.V1ResourceRequirements(
+            requests={'memory': '1Gi', 'cpu': '500m'},
+            limits={'memory': '2Gi', 'cpu': '1000m'}
+        ),
+    )
+
+    # Task dependencies
+    wait_for_ingestion >> calculate_indicators_task

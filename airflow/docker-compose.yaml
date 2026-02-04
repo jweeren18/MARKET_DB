@@ -1,4 +1,4 @@
-# Docker Compose for Airflow local development
+# Docker Compose for Airflow 3 local development
 #
 # Start:   cd airflow && docker compose up -d
 # UI:      http://localhost:8080  (user: airflow / pass: airflow)
@@ -7,7 +7,7 @@
 
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.8.1-python3.10
+  image: apache/airflow:3.1.6-python3.10
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -15,12 +15,13 @@ x-airflow-common:
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Airflow 3: scheduler talks to api-server for task execution
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-api-server:8080/execution/'
     # K8s provider (so the production DAG parses) + backend job deps (so local
     # DAG task callables can import app.* and jobs.* at runtime).
-    _AIRFLOW_PIP_ADDITIONAL_REQUIREMENTS: >-
-      apache-airflow-providers-cncf-kubernetes>=8.0.0
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      apache-airflow-providers-cncf-kubernetes>=10.0.0
       sqlalchemy>=2.0.25
       psycopg2-binary>=2.9.9
       pydantic>=2.6.0
@@ -72,9 +73,13 @@ services:
     ports:
       - "5434:5432"  # Different port to avoid conflict with main DB (5432) and TimescaleDB (5433)
 
-  airflow-webserver:
+  # ---------------------------------------------------------------------------
+  # Airflow 3 services
+  # ---------------------------------------------------------------------------
+
+  airflow-api-server:
     <<: *airflow-common
-    command: webserver
+    command: api-server
     ports:
       - "8080:8080"
     healthcheck:
@@ -104,6 +109,24 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -115,7 +138,10 @@ services:
         exec /entrypoint airflow version
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
+      # Init runs as root; the entrypoint refuses pip as root.  It only needs
+      # DB migrate + version — no backend deps required.
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+      _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}

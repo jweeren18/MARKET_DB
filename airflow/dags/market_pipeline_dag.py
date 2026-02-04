@@ -24,12 +24,11 @@ NOTE: When this DAG is active, the individual K8s DAGs should be paused:
     - generate_alerts_dag
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.decorators import task
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
-from airflow.utils.dates import days_ago
 from kubernetes.client import models as k8s
 
 
@@ -53,8 +52,8 @@ dag = DAG(
     "market_pipeline",
     default_args=default_args,
     description="Full daily market pipeline with staged fan-out: ingest → indicators → scoring → alerts",
-    schedule_interval="15 16 * * 1-5",  # 4:15 PM ET Mon-Fri
-    start_date=days_ago(1),
+    schedule="15 16 * * 1-5",  # 4:15 PM ET Mon-Fri
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["pipeline", "market-data", "daily"],
 )

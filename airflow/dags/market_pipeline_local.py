@@ -21,7 +21,6 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
 
 # Add backend to Python path so job imports resolve
 backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
@@ -190,52 +189,41 @@ dag = DAG(
     "market_pipeline_local",
     default_args=default_args,
     description="Full daily market pipeline — local execution (no Kubernetes)",
-    schedule_interval="15 16 * * 1-5",  # 4:15 PM ET Mon-Fri
-    start_date=days_ago(1),
+    schedule="15 16 * * 1-5",  # 4:15 PM ET Mon-Fri
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["pipeline", "market-data", "local"],
 )
 
 
 # ---------------------------------------------------------------------------
-# Tasks
+# Tasks & dependency chain
 # ---------------------------------------------------------------------------
 
-ingest_task = PythonOperator(
-    task_id="ingest_market_data",
-    python_callable=run_data_ingestion,
-    provide_context=True,
-    execution_timeout=timedelta(minutes=30),
-    dag=dag,
-)
+with dag:
 
-indicators_task = PythonOperator(
-    task_id="calculate_indicators",
-    python_callable=run_indicator_calculation,
-    provide_context=True,
-    execution_timeout=timedelta(minutes=45),
-    dag=dag,
-)
+    ingest_task = PythonOperator(
+        task_id="ingest_market_data",
+        python_callable=run_data_ingestion,
+        execution_timeout=timedelta(minutes=30),
+    )
 
-scoring_task = PythonOperator(
-    task_id="score_opportunities",
-    python_callable=run_opportunity_scoring,
-    provide_context=True,
-    execution_timeout=timedelta(minutes=60),
-    dag=dag,
-)
+    indicators_task = PythonOperator(
+        task_id="calculate_indicators",
+        python_callable=run_indicator_calculation,
+        execution_timeout=timedelta(minutes=45),
+    )
 
-alerts_task = PythonOperator(
-    task_id="generate_alerts",
-    python_callable=run_alert_generation,
-    provide_context=True,
-    execution_timeout=timedelta(minutes=15),
-    dag=dag,
-)
+    scoring_task = PythonOperator(
+        task_id="score_opportunities",
+        python_callable=run_opportunity_scoring,
+        execution_timeout=timedelta(minutes=60),
+    )
 
+    alerts_task = PythonOperator(
+        task_id="generate_alerts",
+        python_callable=run_alert_generation,
+        execution_timeout=timedelta(minutes=15),
+    )
 
-# ---------------------------------------------------------------------------
-# Dependency chain
-# ---------------------------------------------------------------------------
-
-ingest_task >> indicators_task >> scoring_task >> alerts_task
+    ingest_task >> indicators_task >> scoring_task >> alerts_task

@@ -10,7 +10,6 @@ Schedule: Mon-Fri at 5:00 PM EST (1 hour after indicator calculation)
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
 import sys
 import os
 
@@ -136,18 +135,16 @@ dag = DAG(
     'score_opportunities_local',
     default_args=default_args,
     description='Local daily opportunity scoring (no Kubernetes required)',
-    schedule_interval='0 17 * * 1-5',  # 5:00 PM Mon-Fri (1 hour after indicators)
-    start_date=days_ago(1),
+    schedule='0 17 * * 1-5',  # 5:00 PM Mon-Fri (1 hour after indicators)
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['opportunities', 'scoring', 'local'],
 )
 
-# Scoring task
-score_task = PythonOperator(
-    task_id='score_opportunities',
-    python_callable=run_opportunity_scoring,
-    provide_context=True,
-    dag=dag,
-)
+with dag:
 
-score_task
+    # Scoring task
+    score_task = PythonOperator(
+        task_id='score_opportunities',
+        python_callable=run_opportunity_scoring,
+    )

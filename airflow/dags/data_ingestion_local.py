@@ -10,7 +10,6 @@ Schedule: Mon-Fri at 4:00 PM EST (after market close)
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
 import sys
 import os
 
@@ -72,18 +71,16 @@ dag = DAG(
     'data_ingestion_local',
     default_args=default_args,
     description='Local daily market data ingestion (no Kubernetes required)',
-    schedule_interval='0 16 * * 1-5',  # 4 PM Mon-Fri (after market close)
-    start_date=days_ago(1),
+    schedule='0 16 * * 1-5',  # 4 PM Mon-Fri (after market close)
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['market-data', 'ingestion', 'local'],
 )
 
-# Ingestion task
-ingest_task = PythonOperator(
-    task_id='ingest_daily_market_data',
-    python_callable=run_daily_ingestion,
-    provide_context=True,
-    dag=dag,
-)
+with dag:
 
-ingest_task
+    # Ingestion task
+    ingest_task = PythonOperator(
+        task_id='ingest_daily_market_data',
+        python_callable=run_daily_ingestion,
+    )

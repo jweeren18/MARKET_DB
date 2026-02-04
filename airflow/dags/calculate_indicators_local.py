@@ -10,7 +10,6 @@ Schedule: Mon-Fri at 4:30 PM EST (30 minutes after data ingestion)
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
 import sys
 import os
 
@@ -78,18 +77,16 @@ dag = DAG(
     'calculate_indicators_local',
     default_args=default_args,
     description='Local daily indicator calculation (no Kubernetes required)',
-    schedule_interval='30 16 * * 1-5',  # 4:30 PM Mon-Fri (30 min after data ingestion)
-    start_date=days_ago(1),
+    schedule='30 16 * * 1-5',  # 4:30 PM Mon-Fri (30 min after data ingestion)
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['indicators', 'technical-analysis', 'local'],
 )
 
-# Indicator calculation task
-calculate_task = PythonOperator(
-    task_id='calculate_technical_indicators',
-    python_callable=run_indicator_calculation,
-    provide_context=True,
-    dag=dag,
-)
+with dag:
 
-calculate_task
+    # Indicator calculation task
+    calculate_task = PythonOperator(
+        task_id='calculate_technical_indicators',
+        python_callable=run_indicator_calculation,
+    )

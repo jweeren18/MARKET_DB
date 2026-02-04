@@ -16,7 +16,6 @@ Usage:
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
-from airflow.utils.dates import days_ago
 from kubernetes.client import models as k8s
 
 # Default arguments
@@ -34,8 +33,8 @@ dag = DAG(
     'data_backfill_historical',
     default_args=default_args,
     description='Historical market data backfill (manual trigger)',
-    schedule_interval=None,  # Manual trigger only
-    start_date=days_ago(1),
+    schedule=None,  # Manual trigger only
+    start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['market-data', 'backfill', 'historical'],
 )
@@ -63,36 +62,34 @@ volume = k8s.V1Volume(
     )
 )
 
-# Kubernetes Pod Operator - Historical Backfill
-# Fetches historical data based on DAG run configuration
-backfill_task = KubernetesPodOperator(
-    task_id='backfill_historical_data',
-    name='data-backfill-historical-pod',
-    namespace='default',  # Change to your namespace
-    image='market-intelligence-jobs:latest',  # Your Docker image
-    cmds=['python'],
-    arguments=[
-        'jobs/data_ingestion.py',
-        '--all',  # Fetch for all active tickers
-        '--days',
-        '{{ dag_run.conf.get("days", 365) }}',  # Default to 1 year of history
-    ],
-    env_vars=env_vars,
-    # volumes=[volume],
-    # volume_mounts=[volume_mount],
-    get_logs=True,
-    is_delete_operator_pod=True,  # Clean up pod after completion
-    in_cluster=False,  # Set to True when running Airflow in K8s
-    config_file='/path/to/kubeconfig',  # Path to your kubeconfig (local dev)
-    # For production, remove config_file and set in_cluster=True
-    dag=dag,
-    container_resources=k8s.V1ResourceRequirements(
-        requests={'memory': '1Gi', 'cpu': '1000m'},
-        limits={'memory': '2Gi', 'cpu': '2000m'}
-    ),
-    # Longer timeout for historical data
-    execution_timeout=timedelta(hours=2),
-)
+with dag:
 
-# Task dependencies (single task in this DAG)
-backfill_task
+    # Kubernetes Pod Operator - Historical Backfill
+    # Fetches historical data based on DAG run configuration
+    backfill_task = KubernetesPodOperator(
+        task_id='backfill_historical_data',
+        name='data-backfill-historical-pod',
+        namespace='default',  # Change to your namespace
+        image='market-intelligence-jobs:latest',  # Your Docker image
+        cmds=['python'],
+        arguments=[
+            'jobs/data_ingestion.py',
+            '--all',  # Fetch for all active tickers
+            '--days',
+            '{{ dag_run.conf.get("days", 365) }}',  # Default to 1 year of history
+        ],
+        env_vars=env_vars,
+        # volumes=[volume],
+        # volume_mounts=[volume_mount],
+        get_logs=True,
+        is_delete_operator_pod=True,  # Clean up pod after completion
+        in_cluster=False,  # Set to True when running Airflow in K8s
+        config_file='/path/to/kubeconfig',  # Path to your kubeconfig (local dev)
+        # For production, remove config_file and set in_cluster=True
+        container_resources=k8s.V1ResourceRequirements(
+            requests={'memory': '1Gi', 'cpu': '1000m'},
+            limits={'memory': '2Gi', 'cpu': '2000m'}
+        ),
+        # Longer timeout for historical data
+        execution_timeout=timedelta(hours=2),
+    )
