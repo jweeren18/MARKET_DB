@@ -64,7 +64,7 @@ For detailed setup instructions, see [SETUP.md](docs/SETUP.md) and [PHASE_1E_COM
 - **[PHASE_1C_COMPLETE.md](docs/PHASE_1C_COMPLETE.md)** - Signal engine and technical indicators
 - **[PHASE_1B_COMPLETE.md](docs/PHASE_1B_COMPLETE.md)** - Analytics engine and data pipeline
 - **[ANALYTICS_SERVICE.md](docs/ANALYTICS_SERVICE.md)** - Complete analytics service guide
-- **[AIRFLOW_SETUP_GUIDE.md](docs/AIRFLOW_SETUP_GUIDE.md)** - Airflow setup and deployment
+- **[AIRFLOW_SETUP.md](docs/AIRFLOW_SETUP.md)** - Airflow + Kubernetes setup and deployment
 - **[DATA_PIPELINE.md](docs/DATA_PIPELINE.md)** - Data pipeline architecture
 - **[SETUP.md](docs/SETUP.md)** - Initial setup and configuration
 - **[SCHWAB_API_SETUP.md](docs/SCHWAB_API_SETUP.md)** - Schwab API configuration
@@ -207,16 +207,15 @@ The platform uses a **hybrid architecture**:
   - Alert generation
 - **PostgreSQL + TimescaleDB**: Shared data layer for all components
 
-See [AIRFLOW_SETUP_GUIDE.md](docs/AIRFLOW_SETUP_GUIDE.md) for detailed orchestration setup.
+See [AIRFLOW_SETUP.md](docs/AIRFLOW_SETUP.md) for detailed orchestration setup.
 
 ## Setup Instructions
 
 ### Prerequisites
 
 1. **Python 3.10+** installed
-2. **Node.js 18+** installed
-3. **PostgreSQL 15+** with **TimescaleDB** extension
-4. **Schwab Developer API** credentials
+2. **PostgreSQL 15+** with **TimescaleDB** extension
+3. **Schwab Developer API** credentials
 
 ### Database Setup
 
@@ -287,19 +286,18 @@ Backend will be available at http://localhost:8000
 
 API docs available at http://localhost:8000/docs
 
-### Frontend Setup (Coming Soon)
-
-**Status:** Streamlit frontend will be implemented in Phase 1E after analytics services are complete.
+### Frontend Setup
 
 ```bash
-# Install Streamlit (included in pyproject.toml)
-uv sync
+# Install frontend dependencies
+cd frontend
+pip install -r requirements.txt
 
-# Start Streamlit dashboard (once implemented)
-uv run streamlit run frontend/app.py
+# Start Streamlit dashboard
+streamlit run app.py
+
+# Dashboard will open at http://localhost:8501
 ```
-
-Dashboard will be available at http://localhost:8501
 
 ## Market Data Setup (Schwab API)
 
@@ -323,7 +321,6 @@ market-db/
 │   │   ├── models/       # SQLAlchemy models
 │   │   ├── schemas/      # Pydantic schemas
 │   │   ├── services/     # Business logic
-│   │   ├── tasks/        # Background jobs (unused - see jobs/)
 │   │   └── utils/        # Helper functions
 │   ├── jobs/             # Pipeline stage scripts (each is a standalone entry point)
 │   │   ├── data_ingestion.py
@@ -395,7 +392,7 @@ Airflow runs in Docker — no host install needed.
 cd airflow
 docker compose up -d          # starts webserver + scheduler + postgres
 
-# UI → http://localhost:8080  (user: airflow / pass: airflow)
+# UI → http://localhost:8080  (no login required)
 # Logs
 docker compose logs -f airflow-scheduler
 # Stop
@@ -483,44 +480,27 @@ SCORING_SCHEDULE=0 17 * * *
 - Sample data seeding
 - Database initialization scripts
 
-### Phase 1C: Portfolio Analytics (Next)
+### Phase 1C: Portfolio Analytics ✅
 - Portfolio P&L calculations
 - Time-weighted returns (TWR)
 - Money-weighted returns (MWR)
 - Asset allocation breakdowns
 - Risk metrics (volatility, beta, Sharpe ratio, max drawdown)
 
-### Phase 1D: Signal Engine
-- Technical indicator calculations (MA, RSI, MACD, volume)
-- Fundamental metric calculations
-- Signal calculation batch job
-- Indicator storage and APIs
-
-### Phase 1E: Opportunity Scorer
+### Phase 1D: Signal Engine + Opportunity Scorer ✅
+- 20+ technical indicators (MA, RSI, MACD, Bollinger Bands, etc.)
 - Rule-based 10x scoring algorithm (5 components)
 - Confidence level calculation
 - Bull/base/bear scenario modeling
-- Explainability generation
-- Opportunity scoring batch job
+- Full explainability generation
 
-### Phase 1F: Streamlit Dashboard
-- Portfolio overview page
-- Holdings table with live prices
-- Allocation charts (sector, market cap)
-- Performance charts (TWR/MWR)
-- Risk metrics dashboard
-- Opportunity radar with score breakdown
-- Asset deep dive with indicators
-- Alert notifications
+### Phase 1E: Streamlit Dashboard + Alerts ✅
+- Portfolio overview, Opportunity Radar, Ticker Deep Dive
+- Interactive Plotly visualizations
+- Alert generation from score changes
+- Single chained pipeline DAG (ingest → indicators → scoring → alerts)
 
-### Phase 1G: Alerts & Production Polish
-- Alert generation logic
-- Alert notification system
-- Error handling and logging
-- Performance optimization
-- Production deployment preparation
-
-### Phase 2: Whole-Market Scaling (Next)
+### Phase 2: Whole-Market Scaling (Current)
 - Batch flags on all job scripts (`--batch-start` / `--batch-size`)
 - Airflow dynamic task mapping (fan-out/fan-in per pipeline stage)
 - K8s pod-per-batch execution

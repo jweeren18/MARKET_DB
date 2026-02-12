@@ -21,8 +21,7 @@ This folder contains all technical documentation for the Market Intelligence Pla
 
 ## 🔄 Operations
 
-- **[AIRFLOW_SETUP.md](AIRFLOW_SETUP.md)** - Original Airflow setup documentation
-- **[AIRFLOW_SETUP_GUIDE.md](AIRFLOW_SETUP_GUIDE.md)** - Comprehensive Airflow + Kubernetes orchestration guide
+- **[AIRFLOW_SETUP.md](AIRFLOW_SETUP.md)** - Airflow + Kubernetes orchestration and deployment guide
 - **[BULK_IMPORT_GUIDE.md](BULK_IMPORT_GUIDE.md)** - Bulk ticker import instructions
 - **[BACKFILL_RECOMMENDATIONS.md](BACKFILL_RECOMMENDATIONS.md)** - Historical data backfill strategies
 

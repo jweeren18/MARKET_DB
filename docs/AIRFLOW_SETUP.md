@@ -6,35 +6,20 @@ This document explains how to set up and run the Market Intelligence platform us
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                   Apache Airflow                             │
+│                   Apache Airflow 3                           │
 │                                                               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │ Data Ingest  │  │ Calculate    │  │   Score      │       │
-│  │     DAG      │  │ Indicators   │  │Opportunities │       │
-│  │              │  │     DAG      │  │     DAG      │       │
-│  │ 4:00 PM      │→ │ 4:30 PM      │→ │ 5:00 PM      │       │
-│  └──────────────┘  └──────────────┘  └──────────────┘       │
-│         │                 │                  │               │
-│         ▼                 ▼                  ▼               │
+│  market_pipeline_local  (4:15 PM Mon-Fri)                    │
+│  ┌──────────┐→┌───────────┐→┌─────────┐→┌────────────┐     │
+│  │  Ingest  │ │Indicators │ │ Scoring │ │   Alerts   │     │
+│  └──────────┘ └───────────┘ └─────────┘ └────────────┘     │
+│        │            │            │            │               │
+│        ▼            ▼            ▼            ▼               │
 │  ┌──────────────────────────────────────────────────┐       │
-│  │          KubernetesPodOperator                    │       │
-│  │    (Spawns pods for each task)                   │       │
+│  │   PythonOperator  (local)  /  KubernetesPodOperator  (K8s) │
 │  └──────────────────────────────────────────────────┘       │
-└───────────────────────────┼──────────────────────────────────┘
+└───────────────────────────┬──────────────────────────────────┘
                             │
 ┌───────────────────────────┴──────────────────────────────────┐
-│                  Kubernetes Cluster                           │
-│                                                               │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │  Ingest  │  │Calculate │  │  Score   │  │  Alert   │    │
-│  │   Pod    │  │   Pod    │  │   Pod    │  │   Pod    │    │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
-│       │             │              │             │           │
-└───────┼─────────────┼──────────────┼─────────────┼───────────┘
-        │             │              │             │
-        └─────────────┴──────────────┴─────────────┘
-                      │
-┌─────────────────────┴─────────────────────────────────────────┐
 │          PostgreSQL + TimescaleDB (Shared State)              │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -43,26 +28,20 @@ This document explains how to set up and run the Market Intelligence platform us
 
 ### 1. Airflow DAGs (Orchestration)
 
-Four independent DAGs with dependencies:
+A single chained pipeline DAG runs all four stages sequentially at **4:15 PM Mon-Fri**:
 
-- **data_ingestion** (4:00 PM Mon-Fri)
-  - Fetches market data from Schwab API
-  - Stores OHLCV data in PostgreSQL
+| # | Task | What it does |
+|---|------|--------------|
+| 1 | **Ingest** | Fetch latest prices via Schwab API → `price_data` |
+| 2 | **Indicators** | Compute 20+ technical indicators → `technical_indicators` |
+| 3 | **Scoring** | Run 10x scoring algorithm → `opportunity_scores` |
+| 4 | **Alerts** | Diff scores vs yesterday → `alerts` |
 
-- **calculate_indicators** (4:30 PM Mon-Fri)
-  - Waits for data ingestion to complete
-  - Calculates technical indicators (MA, RSI, MACD)
-  - Stores indicators in TimescaleDB
+Two DAG variants exist:
+- **`market_pipeline_local`** — active; uses `PythonOperator` (no K8s needed, runs in Docker Compose Airflow).
+- **`market_pipeline_dag`** — K8s production variant; uses `KubernetesPodOperator` + dynamic task mapping for fan-out. Activate when a K8s cluster is available.
 
-- **score_opportunities** (5:00 PM Mon-Fri)
-  - Waits for indicators to complete
-  - Runs 10x scoring algorithm
-  - Stores scores with explainability
-
-- **generate_alerts** (5:15 PM Mon-Fri)
-  - Waits for scoring to complete
-  - Generates dashboard alerts
-  - Stores alerts for UI
+Standalone legacy DAGs (`data_ingestion_dag`, `calculate_indicators_dag`, `score_opportunities_dag`, `generate_alerts_dag`, `data_backfill_dag`) remain in `dags/` for reference but stay paused.
 
 ### 2. Kubernetes Jobs
 
@@ -121,18 +100,16 @@ echo "AIRFLOW_UID=$(id -u)" > .env
 echo "AIRFLOW_UID=50000" > .env
 
 # Start Airflow services
-docker-compose up -d
+docker compose up -d
 
 # Check services are running
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
-Airflow UI will be available at: http://localhost:8080
-- Username: `airflow`
-- Password: `airflow`
+Airflow UI will be available at: http://localhost:8080 (no login required — SimpleAuthManager all-admins mode).
 
 ### Step 4: Configure Airflow Variables
 
@@ -386,7 +363,7 @@ docker save market-intelligence-jobs:latest | kubectl load -
 
 ```bash
 # Test connection from Airflow container
-docker exec -it airflow_airflow-scheduler_1 bash
+docker exec -it airflow-airflow-scheduler-1 bash
 python -c "import psycopg2; conn = psycopg2.connect('postgresql://postgres:password@host.docker.internal:5432/market_intelligence'); print('Connected!')"
 ```
 
@@ -394,7 +371,7 @@ python -c "import psycopg2; conn = psycopg2.connect('postgresql://postgres:passw
 
 ```bash
 # Check kubeconfig is mounted
-docker exec airflow_airflow-scheduler_1 ls -la /opt/airflow/kubeconfig
+docker exec airflow-airflow-scheduler-1 ls -la /opt/airflow/kubeconfig
 
 # Check permissions
 chmod 644 ~/.kube/config

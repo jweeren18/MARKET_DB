@@ -88,7 +88,7 @@ Thoroughly explore the Charles Schwab Developer API to understand the full exten
 ### ⏳ In Progress — Whole-Market Scaling (~4,000 tickers)
 - [x] Add `--batch-start` / `--batch-size` flags to indicator and scoring jobs (ingest stays single-pod; alerts is lightweight)
 - [x] Rewrite `market_pipeline_dag.py` to use Airflow dynamic task mapping (fan-out per stage)
-- [ ] Validate K8s pod execution end-to-end with batched workloads
+- [x] Validate K8s pod execution end-to-end with batched workloads (Kind cluster: 1 control-plane + 2 workers)
 - [ ] Stress-test indicator calculation and scoring at 4,000-ticker scale
 - [ ] Update resource presets (SMALL/MEDIUM/LARGE) based on actual batch benchmarks
 
@@ -166,7 +166,7 @@ Goal: move from 30 tickers to the full US equity universe (~4,000 tickers) witho
 
 - Database currently has 30 tickers with 2 years of price data
 - Pipeline runs as a single chained DAG (`market_pipeline_local`) at 4:15 PM ET Mon-Fri via Airflow in Docker
-- Airflow UI: `http://localhost:8080` (user: `airflow` / pass: `airflow`) — start with `cd airflow && docker compose up -d`
+- Airflow UI: `http://localhost:8080` (no login required) — start with `cd airflow && docker compose up -d`
 - `run_pipeline.py` is manual-only; use it for one-off runs or testing, not scheduling
 - K8s pipeline DAG (`market_pipeline_dag.py`) is scaffolded and ready; activate when a K8s cluster is available
 - Scaling to ~4,000 tickers requires batch flags + dynamic task mapping (see Phase 2 above)

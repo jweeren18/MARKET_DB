@@ -105,6 +105,7 @@ airflow/*.log
 
 # Kubernetes
 kubernetes/secrets.yaml
+airflow/kubeconfig-kind
 
 # Claude AI / Cursor
 .claude/

@@ -28,7 +28,9 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.decorators import task
+from airflow.models import Variable
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+from airflow.providers.cncf.kubernetes.secret import Secret
 from kubernetes.client import models as k8s
 
 
@@ -60,16 +62,49 @@ dag = DAG(
 
 
 # ---------------------------------------------------------------------------
+# Environment-aware configuration via Airflow Variables
+# ---------------------------------------------------------------------------
+# Non-sensitive config is read from Airflow Variables (with sane defaults so
+# the DAG parses even before Variables are set).
+#
+# Required Airflow Variables (non-sensitive):
+#   k8s_namespace   - K8s namespace for pods         (default: "default")
+#   k8s_image       - Container image URI            (default: "market-intelligence-jobs:latest")
+#   k8s_in_cluster  - "true" when Airflow runs in K8s (default: "false")
+#   k8s_config_file - Path to kubeconfig inside Airflow container (default: "/opt/airflow/kubeconfig")
+#
+# Sensitive credentials (API keys, tokens, DB URL) are stored in a K8s Secret
+# named "market-pipeline-secrets" and mounted as env vars in each pod.
+# This avoids storing secrets in Airflow's metadata DB (which is plaintext).
+# See kubernetes/secrets.yaml.template for the Secret manifest.
+# ---------------------------------------------------------------------------
+
+K8S_NAMESPACE   = Variable.get("k8s_namespace",   default_var="default")
+K8S_IMAGE       = Variable.get("k8s_image",        default_var="market-intelligence-jobs:latest")
+K8S_IN_CLUSTER  = Variable.get("k8s_in_cluster",   default_var="false").lower() == "true"
+K8S_CONFIG_FILE = Variable.get("k8s_config_file",  default_var="/opt/airflow/kubeconfig")
+K8S_PULL_POLICY = Variable.get("k8s_pull_policy",  default_var="Never")  # "Never" for Kind, "Always" for ECR/EKS
+
+
+# ---------------------------------------------------------------------------
 # Shared K8s config
 # ---------------------------------------------------------------------------
 
+# Non-sensitive env vars passed directly.
 ENV_VARS = {
-    "DATABASE_URL": "{{ var.value.database_url }}",
-    "SCHWAB_API_KEY": "{{ var.value.schwab_api_key }}",
-    "SCHWAB_API_SECRET": "{{ var.value.schwab_api_secret }}",
-    "SCHWAB_CALLBACK_URL": "{{ var.value.schwab_callback_url }}",
     "PYTHONUNBUFFERED": "1",
 }
+
+# Sensitive credentials mounted from K8s Secret "market-pipeline-secrets".
+# Each Secret() maps one key in the Secret to one env var in the pod.
+POD_SECRETS = [
+    Secret("env", "DATABASE_URL",        "market-pipeline-secrets", "DATABASE_URL"),
+    Secret("env", "SECRET_KEY",          "market-pipeline-secrets", "SECRET_KEY"),
+    Secret("env", "SCHWAB_API_KEY",      "market-pipeline-secrets", "SCHWAB_API_KEY"),
+    Secret("env", "SCHWAB_API_SECRET",   "market-pipeline-secrets", "SCHWAB_API_SECRET"),
+    Secret("env", "SCHWAB_CALLBACK_URL", "market-pipeline-secrets", "SCHWAB_CALLBACK_URL"),
+    Secret("env", "SCHWAB_TOKENS_JSON",  "market-pipeline-secrets", "SCHWAB_TOKENS_JSON"),
+]
 
 # Resource presets — tune after benchmarks at full-market scale.
 SMALL = k8s.V1ResourceRequirements(
@@ -92,13 +127,15 @@ LARGE = k8s.V1ResourceRequirements(
 #                       so arguments carries only the varying batch flags that
 #                       .expand() maps over.
 POD_DEFAULTS = dict(
-    namespace="default",
-    image="market-intelligence-jobs:latest",
+    namespace=K8S_NAMESPACE,
+    image=K8S_IMAGE,
+    image_pull_policy=K8S_PULL_POLICY,
     env_vars=ENV_VARS,
+    secrets=POD_SECRETS,
     get_logs=True,
     is_delete_operator_pod=True,
-    in_cluster=False,                       # set True when Airflow itself runs in K8s
-    config_file="/path/to/kubeconfig",      # remove when in_cluster=True
+    in_cluster=K8S_IN_CLUSTER,
+    **({} if K8S_IN_CLUSTER else {"config_file": K8S_CONFIG_FILE}),
 )
 
 
@@ -123,11 +160,14 @@ with dag:
         Returns a list of argument vectors — one per pod.  Each vector
         contains only the flags that vary across pods; the script path is
         baked into cmds in the .partial() call.
-        """
-        from sqlalchemy import create_engine, text
-        from airflow.models import Variable
 
-        db_url = Variable.get("database_url")
+        This task runs in the Airflow worker (not a K8s pod), so it reads
+        DATABASE_URL from the worker's environment (set in docker-compose.yaml).
+        """
+        import os
+        from sqlalchemy import create_engine, text
+
+        db_url = os.environ["DATABASE_URL"]
         engine = create_engine(db_url)
         with engine.connect() as conn:
             ticker_count = conn.execute(

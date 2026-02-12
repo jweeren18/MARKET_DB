@@ -12,6 +12,7 @@ This client handles:
 import httpx
 import logging
 import json
+import os
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -57,24 +58,40 @@ class SchwabClient:
             self._load_tokens()
 
     def _load_tokens(self) -> None:
-        """Load stored OAuth tokens from file."""
-        if self.token_file.exists():
+        """Load stored OAuth tokens from environment variable or file.
+
+        Checks SCHWAB_TOKENS_JSON env var first (used by K8s pods where the
+        token file isn't available), then falls back to the on-disk file.
+        """
+        token_data = None
+        source = None
+
+        # Prefer env var (K8s Secrets mount tokens this way)
+        tokens_json = os.environ.get("SCHWAB_TOKENS_JSON")
+        if tokens_json:
+            try:
+                token_data = json.loads(tokens_json)
+                source = "environment variable"
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse SCHWAB_TOKENS_JSON: {e}")
+
+        # Fall back to on-disk file (local dev)
+        if token_data is None and self.token_file.exists():
             try:
                 with open(self.token_file, "r") as f:
                     token_data = json.load(f)
-
-                # Initialize OAuth client with stored token
-                self.oauth_client = OAuth2Client(
-                    client_id=self.api_key,
-                    client_secret=self.api_secret,
-                    token_endpoint=self.TOKEN_URL,
-                    token=token_data,
-                )
-
-                logger.info("Loaded stored Schwab OAuth tokens")
+                source = "token file"
             except Exception as e:
-                logger.error(f"Failed to load tokens: {e}")
-                self.oauth_client = None
+                logger.error(f"Failed to load tokens from file: {e}")
+
+        if token_data:
+            self.oauth_client = OAuth2Client(
+                client_id=self.api_key,
+                client_secret=self.api_secret,
+                token_endpoint=self.TOKEN_URL,
+                token=token_data,
+            )
+            logger.info(f"Loaded Schwab OAuth tokens from {source}")
         else:
             logger.info("No stored tokens found - OAuth flow required")
 

@@ -1,7 +1,7 @@
 # Docker Compose for Airflow 3 local development
 #
 # Start:   cd airflow && docker compose up -d
-# UI:      http://localhost:8080  (user: airflow / pass: airflow)
+# UI:      http://localhost:8080  (no login — SimpleAuthManager all-admins mode)
 # Logs:    docker compose logs -f airflow-scheduler
 # Stop:    docker compose down
 
@@ -20,6 +20,7 @@ x-airflow-common:
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-api-server:8080/execution/'
     # K8s provider (so the production DAG parses) + backend job deps (so local
     # DAG task callables can import app.* and jobs.* at runtime).
+    # awscli is required for EKS kubeconfig auth (aws eks get-token).
     _PIP_ADDITIONAL_REQUIREMENTS: >-
       apache-airflow-providers-cncf-kubernetes>=10.0.0
       sqlalchemy>=2.0.25
@@ -31,12 +32,18 @@ x-airflow-common:
       pandas>=2.2.0
       numpy>=1.26.0
       ta>=0.11.0
+      awscli
     # Backend is volume-mounted at /opt/airflow/backend — put it on PYTHONPATH so
     # "from app.*" and "from jobs.*" imports resolve in all Airflow processes.
     PYTHONPATH: /opt/airflow/backend
     # App database — points at the host's TimescaleDB (port 5433).
     # host.docker.internal resolves to the Docker Desktop host (Windows/Mac).
     DATABASE_URL: postgresql://postgres:password@host.docker.internal:5433/market_intelligence
+    # Airflow 3 SimpleAuthManager — skip login entirely for local dev.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
+    # Shared JWT secret — scheduler and api-server must agree on this value;
+    # leaving it empty causes each container to auto-generate a different one.
+    AIRFLOW__API_AUTH__JWT_SECRET: 'market-db-local-dev-jwt-secret'
   # Pull SCHWAB_API_KEY / SCHWAB_API_SECRET (and other app vars) from the
   # project-root .env.  Explicit environment: entries above take precedence,
   # so DATABASE_URL correctly uses host.docker.internal instead of 127.0.0.1.
@@ -49,6 +56,13 @@ x-airflow-common:
     - ./config:/opt/airflow/config
     # Mount backend/ so local DAGs can resolve app.* and jobs.* imports at runtime
     - ../backend:/opt/airflow/backend
+    # Mount kubeconfig for KubernetesPodOperator to submit pods to the K8s cluster.
+    # Uses kubeconfig-kind (with host.docker.internal) for local Kind clusters.
+    # For EKS, replace with ~/.kube/config.
+    # Set k8s_config_file Airflow Variable to "/opt/airflow/kubeconfig".
+    - ./kubeconfig-kind:/opt/airflow/kubeconfig:ro
+    # Mount AWS credentials so `aws eks get-token` works inside Airflow containers.
+    - ~/.aws:/home/airflow/.aws:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -142,9 +156,6 @@ services:
       # DB migrate + version — no backend deps required.
       _PIP_ADDITIONAL_REQUIREMENTS: ''
       _AIRFLOW_DB_MIGRATE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
     user: "0:0"
 
   airflow-cli:
