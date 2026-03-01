@@ -14,8 +14,8 @@ from app.config import settings
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,  # Verify connections before using
-    pool_size=10,
-    max_overflow=20,
+    pool_size=5,         # Reduced for Supabase free tier (60 connection limit)
+    max_overflow=10,
     echo=settings.env == "development",  # Log SQL in development
 )
 

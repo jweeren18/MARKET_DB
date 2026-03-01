@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: market-intelligence-api
+    runtime: python
+    plan: free
+    branch: main
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: '["https://kaje.streamlit.app"]'
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SCHWAB_API_KEY
+        sync: false
+      - key: SCHWAB_API_SECRET
+        sync: false
+      - key: SCHWAB_CALLBACK_URL
+        sync: false
+      - key: SCHWAB_TOKENS_JSON
+        sync: false

@@ -23,7 +23,6 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str
-    timescaledb_enabled: bool = True
 
     # Schwab API
     schwab_api_key: Optional[str] = None
@@ -44,8 +43,8 @@ class Settings(BaseSettings):
     # Feature Flags
     enable_sentiment: bool = False
 
-    # CORS
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # CORS — set CORS_ORIGINS=["https://your-app.streamlit.app"] in production
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8501"]
 
     model_config = SettingsConfigDict(
         case_sensitive=False,
