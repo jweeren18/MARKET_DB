@@ -9,16 +9,21 @@ Usage:
     python jobs/data_ingestion.py [--tickers AAPL,MSFT,NVDA] [--days 1]
 """
 
+import sys
+import os
 import asyncio
 import argparse
 import logging
 from datetime import datetime, timedelta
 from typing import List
 
+# Add backend to path so we can import app modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app.models import Ticker, PriceData
-from app.services.schwab_client import schwab_client
+from app.services.market_data_service import market_data_service
 from app.config import settings
 
 # Configure logging
@@ -48,11 +53,11 @@ class DataIngestionJob:
         logger.info(f"Fetching {days} days of price data for {symbol}")
 
         try:
-            data = await schwab_client.get_price_history(
+            data = await market_data_service.get_price_history(
                 symbol=symbol,
                 start_date=start_date,
                 end_date=end_date,
-                frequency="daily"
+                interval="1d"
             )
             return data
         except Exception as e:
@@ -112,6 +117,9 @@ class DataIngestionJob:
             try:
                 candles = await self.fetch_price_history(symbol, days)
                 self.save_price_data(symbol, candles)
+                # Schwab rate limit: 120 market-data calls/min.
+                # Sleep 0.5s between calls to stay safely under the cap.
+                await asyncio.sleep(0.5)
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
                 continue

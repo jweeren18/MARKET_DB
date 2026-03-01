@@ -1,0 +1,116 @@
+# TimescaleDB StatefulSet for EKS validation.
+#
+# Deploys a single-replica TimescaleDB instance with a 10Gi persistent volume.
+# Data survives pod restarts (backed by an EBS volume via the default gp2/gp3
+# StorageClass on EKS).
+#
+# Usage:
+#   kubectl apply -f kubernetes/timescaledb-statefulset.yaml
+#
+# Initialize schema:
+#   kubectl cp scripts/init_db.sql market-intelligence/timescaledb-0:/tmp/init_db.sql
+#   kubectl exec -it timescaledb-0 -n market-intelligence -- \
+#     psql -U postgres -d market_intelligence -f /tmp/init_db.sql
+#
+# Port-forward for local access (seeding, debugging):
+#   kubectl port-forward svc/timescaledb 15432:5432 -n market-intelligence
+#
+# Connection string for in-cluster pods:
+#   postgresql://postgres:password@timescaledb.market-intelligence.svc.cluster.local:5432/market_intelligence
+#
+# NOTE: For production, use Timescale Cloud or a properly secured deployment
+# with non-default credentials, TLS, backups, and resource limits tuned to
+# your workload.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb
+  namespace: market-intelligence
+  labels:
+    app: timescaledb
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: timescaledb
+  clusterIP: None  # Headless service for StatefulSet
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: timescaledb
+  namespace: market-intelligence
+spec:
+  serviceName: timescaledb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: timescaledb
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+    spec:
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb:latest-pg15
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: timescaledb-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: market_intelligence
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+
+# Separate secret for TimescaleDB credentials.
+# Replace the password before applying in production.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: timescaledb-credentials
+  namespace: market-intelligence
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: "password"

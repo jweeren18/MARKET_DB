@@ -1,10 +1,7 @@
 -- Database initialization script for Market Intelligence Platform
--- This script sets up PostgreSQL + TimescaleDB and creates all necessary tables
-
--- Enable TimescaleDB extension
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
--- Create core tables (already managed by SQLAlchemy, but included here for reference)
+-- Plain PostgreSQL — TimescaleDB extension not required.
+-- SQLAlchemy creates tables automatically on startup via Base.metadata.create_all(),
+-- so this file is only needed for manual DB setup (e.g. Supabase SQL editor).
 
 -- Portfolios table
 CREATE TABLE IF NOT EXISTS portfolios (
@@ -59,8 +56,6 @@ CREATE TABLE IF NOT EXISTS tickers (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Time-series tables (to be converted to hypertables)
-
 -- Price data table
 CREATE TABLE IF NOT EXISTS price_data (
     ticker VARCHAR(20) NOT NULL,
@@ -74,12 +69,6 @@ CREATE TABLE IF NOT EXISTS price_data (
     PRIMARY KEY (ticker, timestamp)
 );
 
--- Convert to hypertable (only if not already a hypertable)
-SELECT create_hypertable('price_data', 'timestamp',
-    if_not_exists => TRUE,
-    chunk_time_interval => INTERVAL '7 days'
-);
-
 CREATE INDEX IF NOT EXISTS idx_price_ticker_time ON price_data(ticker, timestamp DESC);
 
 -- Technical indicators table
@@ -88,14 +77,8 @@ CREATE TABLE IF NOT EXISTS technical_indicators (
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     indicator_name VARCHAR(50) NOT NULL,
     value DECIMAL(18, 6),
-    metadata JSONB,
+    meta JSONB,
     PRIMARY KEY (ticker, timestamp, indicator_name)
-);
-
--- Convert to hypertable
-SELECT create_hypertable('technical_indicators', 'timestamp',
-    if_not_exists => TRUE,
-    chunk_time_interval => INTERVAL '7 days'
 );
 
 CREATE INDEX IF NOT EXISTS idx_indicator_ticker_name ON technical_indicators(ticker, indicator_name, timestamp DESC);
@@ -109,12 +92,6 @@ CREATE TABLE IF NOT EXISTS fundamental_metrics (
     period VARCHAR(20),
     source VARCHAR(50),
     PRIMARY KEY (ticker, timestamp, metric_name)
-);
-
--- Convert to hypertable
-SELECT create_hypertable('fundamental_metrics', 'timestamp',
-    if_not_exists => TRUE,
-    chunk_time_interval => INTERVAL '30 days'
 );
 
 -- Opportunity scores table
@@ -131,12 +108,6 @@ CREATE TABLE IF NOT EXISTS opportunity_scores (
     PRIMARY KEY (ticker, timestamp)
 );
 
--- Convert to hypertable
-SELECT create_hypertable('opportunity_scores', 'timestamp',
-    if_not_exists => TRUE,
-    chunk_time_interval => INTERVAL '7 days'
-);
-
 CREATE INDEX IF NOT EXISTS idx_opportunity_score ON opportunity_scores(timestamp DESC, overall_score DESC);
 
 -- Alerts table
@@ -146,35 +117,11 @@ CREATE TABLE IF NOT EXISTS alerts (
     alert_type VARCHAR(50) NOT NULL,
     severity VARCHAR(20) NOT NULL CHECK (severity IN ('INFO', 'MEDIUM', 'HIGH')),
     message TEXT NOT NULL,
-    metadata JSONB,
+    meta JSONB,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_alerts_unread ON alerts(created_at DESC, is_read);
-
--- Create retention policies for hypertables (optional - keeps data for 2 years)
--- Uncomment if you want automatic data retention
-
--- SELECT add_retention_policy('price_data', INTERVAL '2 years', if_not_exists => TRUE);
--- SELECT add_retention_policy('technical_indicators', INTERVAL '2 years', if_not_exists => TRUE);
--- SELECT add_retention_policy('fundamental_metrics', INTERVAL '2 years', if_not_exists => TRUE);
--- SELECT add_retention_policy('opportunity_scores', INTERVAL '2 years', if_not_exists => TRUE);
-
--- Create continuous aggregates for common queries (optional - improves performance)
--- Example: Daily OHLCV aggregates
-
--- CREATE MATERIALIZED VIEW IF NOT EXISTS price_data_daily
--- WITH (timescaledb.continuous) AS
--- SELECT
---     ticker,
---     time_bucket('1 day', timestamp) AS day,
---     first(open, timestamp) AS open,
---     max(high) AS high,
---     min(low) AS low,
---     last(close, timestamp) AS close,
---     sum(volume) AS volume
--- FROM price_data
--- GROUP BY ticker, day;
 
 COMMIT;

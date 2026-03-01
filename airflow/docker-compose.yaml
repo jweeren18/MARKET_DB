@@ -1,11 +1,13 @@
-# Docker Compose for Airflow local development
-# Based on official Airflow docker-compose with customizations
-
-version: '3.8'
+# Docker Compose for Airflow 3 local development
+#
+# Start:   cd airflow && docker compose up -d
+# UI:      http://localhost:8080  (no login — SimpleAuthManager all-admins mode)
+# Logs:    docker compose logs -f airflow-scheduler
+# Stop:    docker compose down
 
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.8.0-python3.10
+  image: apache/airflow:3.1.6-python3.10
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -13,19 +15,54 @@ x-airflow-common:
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    # Kubernetes config for local development
-    AIRFLOW__KUBERNETES__KUBE_CLIENT_REQUEST_ARGS: '{"_request_timeout": 60}'
-    AIRFLOW__KUBERNETES__DELETE_WORKER_PODS: 'True'
-    AIRFLOW__KUBERNETES__WORKER_PODS_CREATION_BATCH_SIZE: '10'
+    # Airflow 3: scheduler talks to api-server for task execution
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-api-server:8080/execution/'
+    # K8s provider (so the production DAG parses) + backend job deps (so local
+    # DAG task callables can import app.* and jobs.* at runtime).
+    # awscli is required for EKS kubeconfig auth (aws eks get-token).
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      apache-airflow-providers-cncf-kubernetes>=10.0.0
+      sqlalchemy>=2.0.25
+      psycopg2-binary>=2.9.9
+      pydantic>=2.6.0
+      pydantic-settings>=2.1.0
+      python-dotenv>=1.0.1
+      httpx>=0.26.0
+      pandas>=2.2.0
+      numpy>=1.26.0
+      ta>=0.11.0
+      awscli
+    # Backend is volume-mounted at /opt/airflow/backend — put it on PYTHONPATH so
+    # "from app.*" and "from jobs.*" imports resolve in all Airflow processes.
+    PYTHONPATH: /opt/airflow/backend
+    # App database — points at the host's TimescaleDB (port 5433).
+    # host.docker.internal resolves to the Docker Desktop host (Windows/Mac).
+    DATABASE_URL: postgresql://postgres:password@host.docker.internal:5433/market_intelligence
+    # Airflow 3 SimpleAuthManager — skip login entirely for local dev.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
+    # Shared JWT secret — scheduler and api-server must agree on this value;
+    # leaving it empty causes each container to auto-generate a different one.
+    AIRFLOW__API_AUTH__JWT_SECRET: 'market-db-local-dev-jwt-secret'
+  # Pull SCHWAB_API_KEY / SCHWAB_API_SECRET (and other app vars) from the
+  # project-root .env.  Explicit environment: entries above take precedence,
+  # so DATABASE_URL correctly uses host.docker.internal instead of 127.0.0.1.
+  env_file:
+    - ../.env
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./config:/opt/airflow/config
-    # Mount kubeconfig for local K8s access
-    - ~/.kube/config:/opt/airflow/kubeconfig
+    # Mount backend/ so local DAGs can resolve app.* and jobs.* imports at runtime
+    - ../backend:/opt/airflow/backend
+    # Mount kubeconfig for KubernetesPodOperator to submit pods to the K8s cluster.
+    # Uses kubeconfig-kind (with host.docker.internal) for local Kind clusters.
+    # For EKS, replace with ~/.kube/config.
+    # Set k8s_config_file Airflow Variable to "/opt/airflow/kubeconfig".
+    - ./kubeconfig-kind:/opt/airflow/kubeconfig:ro
+    # Mount AWS credentials so `aws eks get-token` works inside Airflow containers.
+    - ~/.aws:/home/airflow/.aws:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -48,15 +85,19 @@ services:
       start_period: 5s
     restart: always
     ports:
-      - "5433:5432"  # Different port to avoid conflict with main DB
+      - "5434:5432"  # Different port to avoid conflict with main DB (5432) and TimescaleDB (5433)
 
-  airflow-webserver:
+  # ---------------------------------------------------------------------------
+  # Airflow 3 services
+  # ---------------------------------------------------------------------------
+
+  airflow-api-server:
     <<: *airflow-common
-    command: webserver
+    command: api-server
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -82,24 +123,40 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
     command:
       - -c
       - |
-        mkdir -p /sources/logs /sources/dags /sources/plugins
-        chown -R "${AIRFLOW_UID:-50000}:0" /sources/{logs,dags,plugins}
+        mkdir -p /opt/airflow/logs /opt/airflow/dags /opt/airflow/plugins
+        chown -R "${AIRFLOW_UID:-50000}:0" /opt/airflow/{logs,dags,plugins}
         exec /entrypoint airflow version
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      # Init runs as root; the entrypoint refuses pip as root.  It only needs
+      # DB migrate + version — no backend deps required.
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+      _AIRFLOW_DB_MIGRATE: 'true'
     user: "0:0"
-    volumes:
-      - ./:/sources
 
   airflow-cli:
     <<: *airflow-common

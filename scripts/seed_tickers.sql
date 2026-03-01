@@ -1,0 +1,23 @@
+INSERT INTO tickers (ticker, name, asset_type, sector, industry, market_cap_category, exchange, is_active) VALUES
+('AAPL', 'Apple Inc.', 'STOCK', 'Technology', 'Consumer Electronics', 'LARGE', 'NASDAQ', true),
+('MSFT', 'Microsoft Corporation', 'STOCK', 'Technology', 'Software', 'LARGE', 'NASDAQ', true),
+('NVDA', 'NVIDIA Corporation', 'STOCK', 'Technology', 'Semiconductors', 'LARGE', 'NASDAQ', true),
+('GOOGL', 'Alphabet Inc.', 'STOCK', 'Technology', 'Internet Services', 'LARGE', 'NASDAQ', true),
+('META', 'Meta Platforms Inc.', 'STOCK', 'Technology', 'Social Media', 'LARGE', 'NASDAQ', true),
+('JPM', 'JPMorgan Chase & Co.', 'STOCK', 'Finance', 'Banking', 'LARGE', 'NYSE', true),
+('V', 'Visa Inc.', 'STOCK', 'Finance', 'Payment Processing', 'LARGE', 'NYSE', true),
+('BAC', 'Bank of America Corp', 'STOCK', 'Finance', 'Banking', 'LARGE', 'NYSE', true),
+('UNH', 'UnitedHealth Group Inc.', 'STOCK', 'Healthcare', 'Health Insurance', 'LARGE', 'NYSE', true),
+('JNJ', 'Johnson & Johnson', 'STOCK', 'Healthcare', 'Pharmaceuticals', 'LARGE', 'NYSE', true),
+('LLY', 'Eli Lilly and Company', 'STOCK', 'Healthcare', 'Pharmaceuticals', 'LARGE', 'NYSE', true),
+('AMZN', 'Amazon.com Inc.', 'STOCK', 'Consumer Cyclical', 'E-commerce', 'LARGE', 'NASDAQ', true),
+('TSLA', 'Tesla Inc.', 'STOCK', 'Consumer Cyclical', 'Automotive', 'LARGE', 'NASDAQ', true),
+('WMT', 'Walmart Inc.', 'STOCK', 'Consumer Defensive', 'Retail', 'LARGE', 'NYSE', true),
+('HD', 'Home Depot Inc.', 'STOCK', 'Consumer Cyclical', 'Retail', 'LARGE', 'NYSE', true),
+('XOM', 'Exxon Mobil Corporation', 'STOCK', 'Energy', 'Oil & Gas', 'LARGE', 'NYSE', true),
+('CVX', 'Chevron Corporation', 'STOCK', 'Energy', 'Oil & Gas', 'LARGE', 'NYSE', true),
+('SPY', 'SPDR S&P 500 ETF Trust', 'ETF', 'Broad Market', 'Index Fund', 'LARGE', 'NYSE', true),
+('QQQ', 'Invesco QQQ Trust', 'ETF', 'Technology', 'Index Fund', 'LARGE', 'NASDAQ', true),
+('VTI', 'Vanguard Total Stock Market ETF', 'ETF', 'Broad Market', 'Index Fund', 'LARGE', 'NYSE', true),
+('IWM', 'iShares Russell 2000 ETF', 'ETF', 'Small Cap', 'Index Fund', 'SMALL', 'NYSE', true)
+ON CONFLICT (ticker) DO NOTHING;

@@ -1,14 +1,13 @@
 """
 Data Ingestion DAG
 
-Fetches market data from Schwab API daily after market close.
-Runs at 4:00 PM EST Mon-Fri.
+Fetches daily market data from Schwab API after market close.
+Runs at 4:00 PM EST Mon-Fri to fetch previous trading day's data.
 """
 
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
-from airflow.utils.dates import days_ago
 from kubernetes.client import models as k8s
 
 # Default arguments
@@ -17,19 +16,19 @@ default_args = {
     'depends_on_past': False,
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 2,
+    'retries': 3,
     'retry_delay': timedelta(minutes=5),
 }
 
 # DAG definition
 dag = DAG(
-    'data_ingestion',
+    'data_ingestion_daily',
     default_args=default_args,
-    description='Ingest market data from Schwab API',
-    schedule_interval='0 16 * * 1-5',  # 4 PM Mon-Fri (after market close)
-    start_date=days_ago(1),
+    description='Daily market data ingestion from Schwab API',
+    schedule='0 16 * * 1-5',  # 4 PM Mon-Fri (after market close)
+    start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=['market-data', 'ingestion'],
+    tags=['market-data', 'ingestion', 'daily'],
 )
 
 # Environment variables for the pod
@@ -37,6 +36,7 @@ env_vars = {
     'DATABASE_URL': '{{ var.value.database_url }}',
     'SCHWAB_API_KEY': '{{ var.value.schwab_api_key }}',
     'SCHWAB_API_SECRET': '{{ var.value.schwab_api_secret }}',
+    'SCHWAB_CALLBACK_URL': '{{ var.value.schwab_callback_url }}',
     'PYTHONUNBUFFERED': '1',
 }
 
@@ -54,28 +54,27 @@ volume = k8s.V1Volume(
     )
 )
 
-# Kubernetes Pod Operator
-ingest_data_task = KubernetesPodOperator(
-    task_id='ingest_market_data',
-    name='data-ingestion-pod',
-    namespace='default',  # Change to your namespace
-    image='market-intelligence-jobs:latest',  # Your Docker image
-    cmds=['python'],
-    arguments=['jobs/data_ingestion.py', '--all', '--days', '1'],
-    env_vars=env_vars,
-    # volumes=[volume],
-    # volume_mounts=[volume_mount],
-    get_logs=True,
-    is_delete_operator_pod=True,  # Clean up pod after completion
-    in_cluster=False,  # Set to True when running Airflow in K8s
-    config_file='/path/to/kubeconfig',  # Path to your kubeconfig (local dev)
-    # For production, remove config_file and set in_cluster=True
-    dag=dag,
-    resources=k8s.V1ResourceRequirements(
-        requests={'memory': '512Mi', 'cpu': '500m'},
-        limits={'memory': '1Gi', 'cpu': '1000m'}
-    ),
-)
+with dag:
 
-# Task dependencies (single task in this DAG)
-ingest_data_task
+    # Kubernetes Pod Operator - Daily Data Ingestion
+    # Fetches yesterday's data for all active tickers
+    ingest_daily_data_task = KubernetesPodOperator(
+        task_id='ingest_daily_market_data',
+        name='data-ingestion-daily-pod',
+        namespace='default',  # Change to your namespace
+        image='market-intelligence-jobs:latest',  # Your Docker image
+        cmds=['python'],
+        arguments=['jobs/data_ingestion.py', '--all', '--days', '1'],
+        env_vars=env_vars,
+        # volumes=[volume],
+        # volume_mounts=[volume_mount],
+        get_logs=True,
+        is_delete_operator_pod=True,  # Clean up pod after completion
+        in_cluster=False,  # Set to True when running Airflow in K8s
+        config_file='/path/to/kubeconfig',  # Path to your kubeconfig (local dev)
+        # For production, remove config_file and set in_cluster=True
+        container_resources=k8s.V1ResourceRequirements(
+            requests={'memory': '512Mi', 'cpu': '500m'},
+            limits={'memory': '1Gi', 'cpu': '1000m'}
+        ),
+    )

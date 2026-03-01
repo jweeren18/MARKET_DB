@@ -78,15 +78,14 @@ async def root():
 
 
 # Import and include API routers
-from app.api import portfolio
+from app.api import portfolio, analytics, indicators, opportunities, tickers
 
 app.include_router(portfolio.router, prefix="/api/portfolios", tags=["portfolios"])
-
-# Additional routers to be added:
-# from app.api import market_data, analytics, opportunities
+app.include_router(analytics.router)
+app.include_router(indicators.router)
+app.include_router(opportunities.router)
+app.include_router(tickers.router)
 # app.include_router(market_data.router, prefix="/api/tickers", tags=["tickers"])
-# app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
-# app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ class Alert(Base):
     alert_type = Column(String(50), nullable=False)
     severity = Column(String(20), nullable=False)  # 'INFO', 'MEDIUM', 'HIGH'
     message = Column(Text, nullable=False)
-    metadata = Column(JSONB)
+    meta = Column(JSONB)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
